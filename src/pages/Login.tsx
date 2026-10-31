@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
+import { Globe, MessageCircle } from 'lucide-react'
 import { useStore } from '../store'
-import { Logo } from '../components/Logo'
 import { Button, Field } from '../components/ui'
 
 const ACCOUNTS = [
@@ -33,7 +33,14 @@ export function Login() {
   return (
     <div className="login">
       <section className="login-hero">
-        <Logo />
+        <div className="company">
+          <img src="./bit-technologies.png" alt="BIT Technologies" width="112" height="112" />
+          <div>
+            <strong>bittechnology</strong>
+            <a href="https://bittech.site" target="_blank" rel="noreferrer"><Globe size={15} aria-hidden /><span dir="ltr">bittech.site</span></a>
+            <a href="https://wa.me/201501053600" target="_blank" rel="noreferrer" aria-label="واتساب +20 15 01053600"><MessageCircle size={15} aria-hidden /><span dir="ltr">+20 15 01053600</span></a>
+          </div>
+        </div>
         <div className="hero-body">
           <h1>شحنة واحدة تدخل.<br />طلبات كثيرة تخرج.</h1>
           <div className="hero-cut" aria-hidden>
@@ -53,7 +60,7 @@ export function Login() {
       <section className="login-side">
         <form className="login-form" onSubmit={submit} noValidate>
           <h2>تسجيل الدخول</h2>
-          <Field label="البريد الإلكتروني"><input dir="ltr" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+          <Field label="البريد الإلكتروني أو الاسم"><input dir="auto" type="text" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
           <Field label="كلمة المرور"><input dir="ltr" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
           {error && <p className="form-error" role="alert">{error}</p>}
           <Button variant="primary" type="submit">دخول</Button>

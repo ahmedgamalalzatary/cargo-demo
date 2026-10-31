@@ -41,7 +41,7 @@ function StaffForm({ item, onClose }: { item?: Staff; onClose: () => void }) {
     const err: Record<string, string> = {}
     const email = v.email.trim().toLowerCase()
     if (!v.name.trim()) err.name = 'أدخل الاسم بالكامل.'
-    if (!/^\S+@\S+\.\S+$/.test(email)) err.email = 'أدخل بريدًا إلكترونيًا صحيحًا.'
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) err.email = 'أدخل بريدًا إلكترونيًا صحيحًا.'
     else if (emailTaken(db, email, item?.id)) err.email = 'هذا البريد مستخدم في حساب آخر.'
     if (v.password.length < 6) err.password = 'استخدم 6 أحرف على الأقل.'
     setErrors(err)
@@ -63,7 +63,7 @@ function StaffForm({ item, onClose }: { item?: Staff; onClose: () => void }) {
       <form id="staff-form" className="form-grid" onSubmit={submit} noValidate>
         <Field label="الاسم بالكامل" error={errors.name}><input value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} /></Field>
         <Field label="المسمى الوظيفي"><input value={v.title} onChange={(e) => setV({ ...v, title: e.target.value })} /></Field>
-        <Field label="البريد الإلكتروني" error={errors.email}><input dir="ltr" type="email" autoComplete="off" value={v.email} onChange={(e) => setV({ ...v, email: e.target.value })} /></Field>
+        <Field label="البريد الإلكتروني (اختياري)" error={errors.email} hint="بدونه يسجل الموظف الدخول باسمه."><input dir="ltr" type="email" autoComplete="off" value={v.email} onChange={(e) => setV({ ...v, email: e.target.value })} /></Field>
         <Field label="كلمة المرور" error={errors.password} hint="يسجل الموظف الدخول بها."><input dir="ltr" type="text" autoComplete="off" value={v.password} onChange={(e) => setV({ ...v, password: e.target.value })} /></Field>
         <label className="check field-full"><input type="checkbox" checked={v.active} onChange={(e) => setV({ ...v, active: e.target.checked })} />يمكن لهذا الحساب تسجيل الدخول</label>
 

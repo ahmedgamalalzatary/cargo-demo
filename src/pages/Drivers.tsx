@@ -16,7 +16,7 @@ const STATES = [{ value: 'active', label: 'نشط' }, { value: 'inactive', label
 
 const BASE_FIELDS: FieldSpec[] = [
   { name: 'name', label: 'الاسم بالكامل', required: true, full: true },
-  { name: 'email', label: 'بريد الدخول', type: 'email', required: true },
+  { name: 'email', label: 'بريد الدخول (اختياري، بدونه يدخل باسمه)', type: 'email' },
   { name: 'password', label: 'كلمة مرور الدخول', required: true, check: (v) => (v.length < 6 ? 'استخدم 6 أحرف على الأقل.' : undefined) },
   { name: 'phone', label: 'الهاتف', type: 'tel', required: true },
   { name: 'zone', label: 'المنطقة الأساسية', type: 'select', required: true, options: list(ZONES) },

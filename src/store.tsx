@@ -62,9 +62,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       driver,
       toast,
       login(email, password) {
-        const address = email.trim().toLowerCase()
-        const found = [...db.staff, ...db.drivers].find((s) => s.email.toLowerCase() === address)
-        if (!found || found.password !== password) return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.'
+        /* Email is optional, so an account can also sign in by name. Names may repeat; the password picks the account. */
+        const id = email.trim().toLowerCase()
+        const found = id ? [...db.staff, ...db.drivers].find((s) => (s.email.toLowerCase() === id || s.name.trim().toLowerCase() === id) && s.password === password) : undefined
+        if (!found) return 'بيانات الدخول أو كلمة المرور غير صحيحة.'
         if (!found.active) return 'هذا الحساب معطّل. اطلب من المدير تفعيله.'
         window.location.hash = '#/'
         setUserId(found.id)

@@ -139,7 +139,7 @@ export function nextId(existing: { id: string }[], prefix: string, start: number
 }
 
 export const emailTaken = (db: Db, email: string, exceptId?: string) =>
-  [...db.staff, ...db.drivers].some((a) => a.email.toLowerCase() === email.toLowerCase() && a.id !== exceptId)
+  !!email && [...db.staff, ...db.drivers].some((a) => a.email.toLowerCase() === email.toLowerCase() && a.id !== exceptId)
 
 export const pickedAt = (o: Order) => [...o.events].reverse().find((e) => e.status === 'picked')?.at ?? null
 export const closedAt = (o: Order) =>
