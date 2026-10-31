@@ -1,19 +1,17 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { OrderStatus } from '../types'
 import { useStore } from '../store'
-import { STATUS_LABEL, moveOrder } from '../lib/domain'
-import { fmtDateTime, fmtMoney, fmtQty } from '../lib/format'
-import { Button, Drawer, StatusPill } from './ui'
+import { ASSIGNABLE, STATUS_LABEL, moveOrder, orderRows } from '../lib/domain'
+import { fmtMoney, fmtQty } from '../lib/format'
+import { Button, Drawer, StatusPill, Timeline } from './ui'
 
 export function OrderDetail({ orderId, onClose, onEdit }: { orderId: string; onClose: () => void; onEdit?: () => void }) {
   const { db, setDb, user, can, toast } = useStore()
   const [driverId, setDriverId] = useState('')
-  const order = db.orders.find((o) => o.id === orderId)
+  const order = useMemo(() => orderRows(db).find((o) => o.id === orderId), [db, orderId])
   if (!order || !user) return null
-  const purchase = db.purchases.find((p) => p.id === order.purchaseId)
-  const supplier = db.suppliers.find((s) => s.id === purchase?.supplierId)
-  const driver = db.drivers.find((d) => d.id === order.driverId)
+  const driver = order.driver
   const edit = can('orders', 'edit')
   const drivers = db.drivers.filter((d) => d.active && d.id !== order.driverId)
 
@@ -27,7 +25,8 @@ export function OrderDetail({ orderId, onClose, onEdit }: { orderId: string; onC
     move('assigned', d.id, `أُسند إلى ${d.name}`)
     setDriverId('')
   }
-  const canAssign = edit && ['unassigned', 'assigned', 'failed'].includes(order.status)
+  const canAssign = edit && ASSIGNABLE.includes(order.status)
+  const lastDenial = order.status === 'denied' ? [...order.events].reverse().find((e) => e.status === 'denied') : undefined
 
   return (
     <Drawer title={order.id} onClose={onClose}>
@@ -35,10 +34,17 @@ export function OrderDetail({ orderId, onClose, onEdit }: { orderId: string; onC
         <StatusPill status={order.status} />
         <strong className="detail-price">{fmtMoney(order.price)}</strong>
       </div>
+      {lastDenial && <p className="notice">رفضه {lastDenial.by}: {lastDenial.note}. أسنده إلى مندوب آخر.</p>}
+      <h3 className="detail-h">الأصناف</h3>
+      <ul className="item-list">
+        {order.rows.map((r) => (
+          <li key={r.line.id}>
+            <span><b>{fmtQty(r.quantity, r.line.unit)}</b> {r.line.product}</span>
+            <small>{can('stock', 'view') ? <Link to={`/stock/${r.invoice.id}`}>{r.invoice.id}</Link> : r.invoice.id}، {r.supplier.name}</small>
+          </li>
+        ))}
+      </ul>
       <dl className="facts">
-        <dt>البضاعة</dt><dd>{fmtQty(order.quantity, purchase?.unit ?? '')} من {purchase?.product}</dd>
-        <dt>مقسَّم من</dt><dd>{can('purchases', 'view') ? <Link to={`/purchases/${order.purchaseId}`}>{order.purchaseId}</Link> : order.purchaseId}</dd>
-        <dt>المورد</dt><dd>{supplier?.name}</dd>
         <dt>العميل</dt><dd>{order.client}<br /><a dir="ltr" href={`tel:${order.phone}`}>{order.phone}</a></dd>
         <dt>التوصيل إلى</dt><dd>{order.address}</dd>
         <dt>المندوب</dt><dd>{driver ? <>{driver.name}<br /><a dir="ltr" href={`tel:${driver.phone}`}>{driver.phone}</a></> : 'لم يُسند بعد'}</dd>
@@ -46,7 +52,7 @@ export function OrderDetail({ orderId, onClose, onEdit }: { orderId: string; onC
 
       {edit && order.status !== 'delivered' && (
         <section className="detail-actions">
-          {order.status === 'assigned' && <Button variant="primary" onClick={() => move('picked')}>تأكيد الاستلام</Button>}
+          {order.status === 'accepted' && <Button variant="primary" onClick={() => move('picked')}>تأكيد الاستلام</Button>}
           {order.status === 'picked' && (
             <>
               <Button variant="primary" onClick={() => move('delivered')}>تأكيد التوصيل</Button>
@@ -62,24 +68,14 @@ export function OrderDetail({ orderId, onClose, onEdit }: { orderId: string; onC
                   {drivers.map((d) => <option key={d.id} value={d.id}>{d.name}، {d.zone}</option>)}
                 </select>
               </label>
-              <Button variant={order.status === 'assigned' ? 'plain' : 'primary'} disabled={!driverId} onClick={assign}>{order.driverId ? 'إعادة الإسناد' : 'إسناد'}</Button>
+              <Button variant={order.status === 'assigned' || order.status === 'accepted' ? 'plain' : 'primary'} disabled={!driverId} onClick={assign}>{order.driverId ? 'إعادة الإسناد' : 'إسناد'}</Button>
             </div>
           )}
         </section>
       )}
 
       <h3 className="detail-h">السجل</h3>
-      <ol className="timeline">
-        {[...order.events].reverse().map((e, i) => (
-          <li key={i}>
-            <i className={`seg seg-${e.status}`} />
-            <div>
-              <strong>{e.status === 'unassigned' && !e.note ? 'تم التقسيم من عملية الشراء' : e.note ?? STATUS_LABEL[e.status]}</strong>
-              <span>{fmtDateTime(e.at)}، بواسطة {e.by}</span>
-            </div>
-          </li>
-        ))}
-      </ol>
+      <Timeline events={order.events} />
       {onEdit && <p className="detail-edit"><Button onClick={onEdit}>تعديل بيانات الطلب</Button></p>}
     </Drawer>
   )

@@ -22,7 +22,8 @@ export function fmtDuration(ms: number) {
 /* Arabic counted nouns: 2 has its own form, 3 to 10 take the plural, the rest the singular. */
 export type Noun = [one: string, two: string, few: string]
 export const ORDERS: Noun = ['طلب', 'طلبان', 'طلبات']
-export const PURCHASES: Noun = ['عملية شراء', 'عمليتا شراء', 'عمليات شراء']
+export const INVOICES: Noun = ['فاتورة', 'فاتورتان', 'فواتير']
+export const PRODUCTS: Noun = ['صنف', 'صنفان', 'أصناف']
 export const SUPPLIERS: Noun = ['مورد', 'موردان', 'موردين']
 export const DRIVERS: Noun = ['مندوب', 'مندوبان', 'مندوبين']
 export const ACCOUNTS: Noun = ['حساب', 'حسابان', 'حسابات']

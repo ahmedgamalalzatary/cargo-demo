@@ -5,19 +5,21 @@ import { StoreProvider, useStore } from './store'
 import { Shell } from './components/Shell'
 import { Login } from './pages/Login'
 import { Orders } from './pages/Orders'
-import { Purchases } from './pages/Purchases'
-import { PurchaseDetail } from './pages/PurchaseDetail'
+import { Stock } from './pages/Stock'
+import { StockInvoice } from './pages/StockInvoice'
 import { Suppliers } from './pages/Suppliers'
 import { Drivers } from './pages/Drivers'
 import { StaffPage } from './pages/Staff'
 import { Reports } from './pages/Reports'
+import { MyOrders } from './pages/MyOrders'
+import { MyHistory } from './pages/MyHistory'
 
-const ORDER: Module[] = ['orders', 'purchases', 'suppliers', 'drivers', 'reports']
+const ORDER: Module[] = ['orders', 'stock', 'suppliers', 'drivers', 'reports']
 
 function useHome() {
   const { can, user } = useStore()
   const first = ORDER.find((m) => can(m, 'view'))
-  if (first) return `/${first === 'drivers' ? 'drivers' : first}`
+  if (first) return `/${first}`
   return user?.role === 'admin' ? '/staff' : '/no-access'
 }
 
@@ -42,7 +44,18 @@ function Home() {
 }
 
 function Routed() {
-  const { user } = useStore()
+  const { user, driver } = useStore()
+  if (driver) {
+    return (
+      <Routes>
+        <Route element={<Shell />}>
+          <Route path="/my-orders" element={<MyOrders />} />
+          <Route path="/my-history" element={<MyHistory />} />
+          <Route path="*" element={<Navigate to="/my-orders" replace />} />
+        </Route>
+      </Routes>
+    )
+  }
   if (!user) {
     return (
       <Routes>
@@ -54,8 +67,8 @@ function Routed() {
     <Routes>
       <Route element={<Shell />}>
         <Route path="/orders" element={<Guard module="orders"><Orders /></Guard>} />
-        <Route path="/purchases" element={<Guard module="purchases"><Purchases /></Guard>} />
-        <Route path="/purchases/:id" element={<Guard module="purchases"><PurchaseDetail /></Guard>} />
+        <Route path="/stock" element={<Guard module="stock"><Stock /></Guard>} />
+        <Route path="/stock/:id" element={<Guard module="stock"><StockInvoice /></Guard>} />
         <Route path="/suppliers" element={<Guard module="suppliers"><Suppliers /></Guard>} />
         <Route path="/drivers" element={<Guard module="drivers"><Drivers /></Guard>} />
         <Route path="/reports" element={<Guard module="reports"><Reports /></Guard>} />

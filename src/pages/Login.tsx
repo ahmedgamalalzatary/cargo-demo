@@ -5,9 +5,10 @@ import { Button, Field } from '../components/ui'
 
 const ACCOUNTS = [
   { email: 'admin@tajzia.demo', password: 'admin123', role: 'المدير', can: 'كل شيء، بما فيه حسابات الموظفين' },
-  { email: 'mona@tajzia.demo', password: 'mona123', role: 'المشتريات', can: 'الموردون والمشتريات، وعرض الطلبات فقط' },
-  { email: 'tarek@tajzia.demo', password: 'tarek123', role: 'التوزيع', can: 'الطلبات والمندوبون، وعرض المشتريات فقط' },
+  { email: 'mona@tajzia.demo', password: 'mona123', role: 'المخزون', can: 'الموردون والمخزون، وعرض الطلبات فقط' },
+  { email: 'tarek@tajzia.demo', password: 'tarek123', role: 'التوزيع', can: 'الطلبات والمندوبون، وعرض المخزون فقط' },
   { email: 'salma@tajzia.demo', password: 'salma123', role: 'المالية', can: 'التقارير والتصدير فقط' },
+  { email: 'driver1@tajzia.demo', password: 'driver123', role: 'مندوب التوصيل (كريم عادل)', can: 'طلباته: قبول ورفض وتوصيل، وسجله' },
 ]
 
 const PIECES = [
@@ -36,7 +37,7 @@ export function Login() {
         <div className="hero-body">
           <h1>شحنة واحدة تدخل.<br />طلبات كثيرة تخرج.</h1>
           <div className="hero-cut" aria-hidden>
-            <p className="hero-load">300 كرتونة زيت عباد الشمس، رقم الشراء PO-1042</p>
+            <p className="hero-load">300 كرتونة زيت عباد الشمس، الفاتورة INV-1042</p>
             <div className="hero-bar">
               {PIECES.map((p, i) => (
                 <div key={p.who} className="hero-piece" style={{ flexGrow: p.grow, '--i': i } as React.CSSProperties}>
@@ -46,7 +47,7 @@ export function Login() {
               ))}
             </div>
           </div>
-          <p className="hero-note">اشترِ من الموردين، قسّم كل عملية شراء إلى طلبات للعملاء، وأسند كل طلب إلى مندوب توصيل.</p>
+          <p className="hero-note">اشترِ من الموردين، قسّم المخزون إلى طلبات للعملاء، وأسند كل طلب إلى مندوب يقبله ويوصله.</p>
         </div>
       </section>
       <section className="login-side">

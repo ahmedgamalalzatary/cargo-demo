@@ -2,7 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import type { Action, Module, Permissions, Staff } from '../types'
 import { useStore } from '../store'
-import { MODULES, PRESETS, emptyPermissions, nextId } from '../lib/domain'
+import { MODULES, PRESETS, emailTaken, emptyPermissions, nextId } from '../lib/domain'
 import { ACCOUNTS, fmtCount, fmtDate } from '../lib/format'
 import { inRange, periodRange } from '../lib/period'
 import { textSearch } from '../lib/search'
@@ -42,7 +42,7 @@ function StaffForm({ item, onClose }: { item?: Staff; onClose: () => void }) {
     const email = v.email.trim().toLowerCase()
     if (!v.name.trim()) err.name = 'أدخل الاسم بالكامل.'
     if (!/^\S+@\S+\.\S+$/.test(email)) err.email = 'أدخل بريدًا إلكترونيًا صحيحًا.'
-    else if (db.staff.some((s) => s.email.toLowerCase() === email && s.id !== item?.id)) err.email = 'هذا البريد مستخدم في حساب آخر.'
+    else if (emailTaken(db, email, item?.id)) err.email = 'هذا البريد مستخدم في حساب آخر.'
     if (v.password.length < 6) err.password = 'استخدم 6 أحرف على الأقل.'
     setErrors(err)
     if (Object.keys(err).length) return

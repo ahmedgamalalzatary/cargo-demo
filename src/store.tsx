@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
-import type { Action, Db, Module, Staff } from './types'
+import type { Action, Db, Driver, Module, Staff } from './types'
 import { can as canDo } from './lib/domain'
 import { createSeed } from './lib/seed'
 
-const DB_KEY = 'tajzia-db-ar-v1'
+const DB_KEY = 'tajzia-db-ar-v2'
 const SESSION_KEY = 'tajzia-session-ar'
 
 function read<T>(key: string): T | null {
@@ -27,6 +27,7 @@ interface Store {
   db: Db
   setDb: Dispatch<SetStateAction<Db>>
   user: Staff | null
+  driver: Driver | null
   login: (email: string, password: string) => string | null
   logout: () => void
   can: (module: Module, action: Action) => boolean
@@ -45,6 +46,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => write(SESSION_KEY, userId), [userId])
 
   const user = useMemo(() => db.staff.find((s) => s.id === userId && s.active) ?? null, [db.staff, userId])
+  const driver = useMemo(() => db.drivers.find((d) => d.id === userId && d.active) ?? null, [db.drivers, userId])
 
   const toast = useCallback((message: string) => {
     const id = Date.now() + Math.random()
@@ -57,11 +59,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       db,
       setDb,
       user,
+      driver,
       toast,
       login(email, password) {
-        const found = db.staff.find((s) => s.email.toLowerCase() === email.trim().toLowerCase())
+        const address = email.trim().toLowerCase()
+        const found = [...db.staff, ...db.drivers].find((s) => s.email.toLowerCase() === address)
         if (!found || found.password !== password) return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.'
         if (!found.active) return 'هذا الحساب معطّل. اطلب من المدير تفعيله.'
+        window.location.hash = '#/'
         setUserId(found.id)
         return null
       },
@@ -76,7 +81,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         window.location.hash = '#/'
       },
     }),
-    [db, user, toast],
+    [db, user, driver, toast],
   )
 
   return (

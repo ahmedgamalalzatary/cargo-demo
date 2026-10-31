@@ -11,7 +11,9 @@
   --tape-deep: #e6b400;
 
   --s-unassigned: #8a9299;
-  --s-assigned: #3c444c;
+  --s-assigned: #b98900;
+  --s-accepted: #3c444c;
+  --s-denied: #8e3fa8;
   --s-picked: #2f6bd8;
   --s-delivered: #0e8f6a;
   --s-failed: #d43d3d;
@@ -77,6 +79,8 @@ input[type='checkbox'] { width: 17px; height: 17px; accent-color: var(--ink); ma
 .seg { display: block; background: var(--c); }
 .seg-unassigned { --c: var(--s-unassigned); }
 .seg-assigned { --c: var(--s-assigned); }
+.seg-accepted { --c: var(--s-accepted); }
+.seg-denied { --c: var(--s-denied); }
 .seg-picked { --c: var(--s-picked); }
 .seg-delivered { --c: var(--s-delivered); }
 .seg-failed {
@@ -84,7 +88,6 @@ input[type='checkbox'] { width: 17px; height: 17px; accent-color: var(--ink); ma
   background: repeating-linear-gradient(135deg, var(--s-failed) 0 3px, #eb8b8b 3px 5px);
 }
 .seg-uncut { background: repeating-linear-gradient(135deg, var(--line) 0 2px, var(--white) 2px 6px); box-shadow: inset 0 0 0 1px var(--line); }
-.seg-preview { background: var(--tape); }
 
 .pill {
   display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
@@ -92,7 +95,9 @@ input[type='checkbox'] { width: 17px; height: 17px; accent-color: var(--ink); ma
 }
 .pill svg { flex: none; }
 .pill-unassigned { color: #5c656d; }
-.pill-assigned { color: var(--s-assigned); }
+.pill-assigned { color: #7f5e00; }
+.pill-accepted { color: var(--s-accepted); }
+.pill-denied { color: #7b3192; }
 .pill-picked { color: #2259bd; }
 .pill-delivered { color: #0a7557; }
 .pill-failed { color: #b92c2c; }
@@ -200,7 +205,7 @@ input[type='checkbox'] { width: 17px; height: 17px; accent-color: var(--ink); ma
 .empty h1, .empty h2 { font: 600 20px/1.5 var(--display); color: var(--ink); margin-bottom: 4px; }
 .empty-page { margin-top: 20px; }
 
-/* Purchase detail */
+/* Stock invoice detail */
 .load { display: grid; gap: 14px; padding: 20px; margin-bottom: 20px; background: var(--white); border: 1px solid var(--line); }
 .load-numbers { display: flex; flex-wrap: wrap; gap: 8px 36px; color: var(--ink-2); font-size: 14px; }
 .load-numbers b { display: block; font: 600 24px/1.3 var(--display); color: var(--ink); }
@@ -232,7 +237,43 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
 .field-hint { font-size: 13px; color: var(--ink-3); }
 .field-msg { font-size: 13px; color: #b92c2c; font-weight: 500; }
 .field-error input, .field-error select { border-color: #b92c2c; }
-.cut-preview p { margin-top: 6px; font-size: 14px; color: var(--ink-2); }
+
+/* Repeating product rows in the invoice and order forms */
+.lines { display: grid; gap: 12px; min-width: 0; padding: 14px; margin: 0; background: var(--white); border: 1px solid var(--line); }
+.lines legend { padding: 0 6px; font: 600 16px/1.5 var(--display); }
+.lines > .btn { justify-self: start; }
+.line-row { display: grid; gap: 8px; align-items: start; padding-bottom: 12px; border-bottom: 1px solid var(--line-2); }
+.line-row-order { grid-template-columns: minmax(0, 1fr) 120px 36px; }
+.line-row-invoice { grid-template-columns: minmax(0, 1fr) 84px 96px 96px 36px; }
+.line-row .icon-btn { margin-top: 25px; }
+.foot-total { margin-inline-end: auto; align-self: center; font-size: 14px; color: var(--ink-2); }
+.foot-total b { font: 600 18px/1.3 var(--display); color: var(--ink); }
+
+.item-list { display: grid; gap: 6px; }
+.item-list b { font-weight: 600; }
+.notice { padding: 9px 12px; margin-block: 10px; font-size: 14px; background: #f6edf9; border-inline-start: 4px solid var(--s-denied); }
+.clamp { max-width: 340px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* Invoice lines */
+.invoice-lines { display: grid; gap: 14px; }
+.invoice-line-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; margin-bottom: 6px; font-size: 14px; color: var(--ink-2); }
+.invoice-line-head strong { font-size: 15px; font-weight: 600; color: var(--ink); }
+.invoice-lines .cutbar-lg { height: 26px; }
+
+/* Delivery man: one card per job, with the next action always visible */
+.tab-count { display: inline-block; min-width: 22px; padding-inline: 5px; margin-inline-start: 4px; font-size: 13px; text-align: center; background: var(--line-2); color: var(--ink); border-radius: 2px; }
+.job-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 12px; }
+.job { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; background: var(--white); border: 1px solid var(--line); }
+.job-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.job-price { margin-inline-start: auto; font: 600 16px/1.4 var(--display); white-space: nowrap; }
+.job .item-list { padding-block: 8px; border-block: 1px solid var(--line-2); }
+.job-facts { display: grid; gap: 4px; font-size: 14px; }
+.job-facts > div { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 6px; }
+.job-facts dt { margin-top: 3px; color: var(--ink-3); }
+.job .notice { margin: 0; }
+.job-time { font-size: 13px; color: var(--ink-3); }
+.job-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+.job-actions .btn { flex: 1 1 130px; min-height: 44px; }
 .check { display: flex; align-items: center; gap: 9px; font-weight: 500; }
 
 .perm { border: 0; padding: 0; margin: 6px 0 0; min-width: 0; }
@@ -395,6 +436,11 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
   .cutbar { min-width: 0; }
 
   .form-grid { grid-template-columns: minmax(0, 1fr); }
+  .line-row-order { grid-template-columns: minmax(0, 1fr) 36px; }
+  .line-row-order > .field:first-child { grid-column: 1 / -1; }
+  .line-row-invoice { grid-template-columns: 1fr 1fr; }
+  .line-row-invoice > .field:first-child { grid-column: 1 / -1; }
+  .clamp { max-width: none; white-space: normal; }
   .drawer-body { padding: 16px; }
   .drawer-head, .drawer-foot { padding-inline: 16px; }
   .load { padding: 16px; }

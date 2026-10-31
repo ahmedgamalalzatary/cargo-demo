@@ -1,7 +1,7 @@
-export type Module = 'suppliers' | 'purchases' | 'drivers' | 'orders' | 'reports'
+export type Module = 'suppliers' | 'stock' | 'drivers' | 'orders' | 'reports'
 export type Action = 'view' | 'create' | 'edit' | 'delete' | 'export'
 export type Permissions = Record<Module, Action[]>
-export type OrderStatus = 'unassigned' | 'assigned' | 'picked' | 'delivered' | 'failed'
+export type OrderStatus = 'unassigned' | 'assigned' | 'accepted' | 'denied' | 'picked' | 'delivered' | 'failed'
 
 export interface Supplier {
   id: string
@@ -15,21 +15,28 @@ export interface Supplier {
   createdAt: number
 }
 
-export interface Purchase {
+export interface InvoiceLine {
   id: string
-  supplierId: string
   product: string
   unit: string
   quantity: number
   unitCost: number
+}
+
+export interface Invoice {
+  id: string
+  supplierId: string
   date: number
   note: string
+  lines: InvoiceLine[]
 }
 
 export interface Driver {
   id: string
   name: string
   phone: string
+  email: string
+  password: string
   vehicle: string
   plate: string
   zone: string
@@ -42,12 +49,18 @@ export interface OrderEvent {
   status: OrderStatus
   by: string
   note?: string
+  /** The delivery man this step concerns. Kept here so a driver's history survives reassignment. */
+  driverId?: string
+}
+
+export interface OrderItem {
+  lineId: string
+  quantity: number
 }
 
 export interface Order {
   id: string
-  purchaseId: string
-  quantity: number
+  items: OrderItem[]
   price: number
   client: string
   phone: string
@@ -73,7 +86,7 @@ export interface Staff {
 
 export interface Db {
   suppliers: Supplier[]
-  purchases: Purchase[]
+  invoices: Invoice[]
   drivers: Driver[]
   orders: Order[]
   staff: Staff[]

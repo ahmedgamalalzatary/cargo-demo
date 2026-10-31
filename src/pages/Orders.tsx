@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useStore } from '../store'
-import { STATUS_LABEL, STATUS_ORDER, ZONES, moveOrder, orderRows, type OrderRow } from '../lib/domain'
-import { ORDERS, fmtCount, fmtDateTime, fmtMoney, fmtQty } from '../lib/format'
+import { ASSIGNABLE, STATUS_LABEL, STATUS_ORDER, ZONES, moveOrder, orderRows, type OrderRow } from '../lib/domain'
+import { ORDERS, PRODUCTS, fmtCount, fmtDateTime, fmtMoney } from '../lib/format'
 import { inRange, periodRange } from '../lib/period'
 import { matchesParsed, parseQuery } from '../lib/search'
 import { Button, Confirm, FilterBar, IconButton, PageHead, PeriodFilter, RowActions, SearchBox, Select, StatusPill, Table, useFilters, type Col } from '../components/ui'
@@ -27,7 +27,7 @@ export function Orders() {
       inRange(o.createdAt, range) &&
       (!f.status || o.status === f.status) &&
       (!f.driver || o.driverId === f.driver) &&
-      (!f.supplier || o.supplier.id === f.supplier) &&
+      (!f.supplier || o.suppliers.some((s) => s.id === f.supplier)) &&
       (!f.zone || o.zone === f.zone) &&
       matchesParsed(o, parsed))
   }, [db, f, parsed])
@@ -37,11 +37,11 @@ export function Orders() {
   const cols: Col<OrderRow>[] = [
     { key: 'id', label: 'الطلب', render: (o) => <strong className="id">{o.id}</strong>, sort: (o) => o.id },
     { key: 'status', label: 'الحالة', render: (o) => <StatusPill status={o.status} />, sort: (o) => STATUS_ORDER.indexOf(o.status) },
-    { key: 'goods', label: 'البضاعة', render: (o) => <>{fmtQty(o.quantity, o.purchase.unit)} من {o.purchase.product}<small>{o.purchaseId}، {o.supplier.name}</small></>, sort: (o) => o.purchase.product },
+    { key: 'goods', label: 'الأصناف', render: (o) => <>{o.goods}<small>{o.rows.length > 1 ? `${fmtCount(o.rows.length, PRODUCTS)}، ` : ''}{o.suppliers.map((s) => s.name).join('، ')}</small></>, sort: (o) => o.rows.length },
     { key: 'client', label: 'العميل', render: (o) => <>{o.client}<small>{o.zone}</small></>, sort: (o) => o.client },
     { key: 'driver', label: 'المندوب', render: (o) => o.driver?.name ?? <span className="muted">غير مسند</span>, sort: (o) => o.driver?.name ?? '' },
     { key: 'price', label: 'السعر', right: true, render: (o) => fmtMoney(o.price), sort: (o) => o.price },
-    { key: 'created', label: 'تاريخ التقسيم', render: (o) => fmtDateTime(o.createdAt), sort: (o) => o.createdAt },
+    { key: 'created', label: 'تاريخ الإنشاء', render: (o) => fmtDateTime(o.createdAt), sort: (o) => o.createdAt },
   ]
   if (canEdit || canDelete) {
     cols.push({
@@ -54,7 +54,7 @@ export function Orders() {
     })
   }
 
-  const assignable = rows.filter((o) => selected.has(o.id) && (o.status === 'unassigned' || o.status === 'assigned' || o.status === 'failed'))
+  const assignable = rows.filter((o) => selected.has(o.id) && ASSIGNABLE.includes(o.status))
   const bulkAssign = () => {
     const driver = db.drivers.find((d) => d.id === bulkDriver)
     if (!driver || !user) return
@@ -69,7 +69,7 @@ export function Orders() {
   return (
     <>
       <PageHead title="الطلبات" count={`${fmtCount(rows.length, ORDERS)}، بإجمالي ${fmtMoney(rows.reduce((n, o) => n + o.price, 0))}`}>
-        {can('orders', 'create') && <Button variant="primary" onClick={() => setForm({})}><Plus size={17} aria-hidden />تقسيم طلب جديد</Button>}
+        {can('orders', 'create') && <Button variant="primary" onClick={() => setForm({})}><Plus size={17} aria-hidden />طلب جديد</Button>}
       </PageHead>
       <SearchBox value={f.q} onChange={(q) => set({ q })} chips={parsed.chips} placeholder='جرّب: فشل التوصيل في الجيزة الأسبوع الماضي أكثر من 500، أو: كريم أرز' />
       <FilterBar active={active} onClear={clear}>
@@ -99,7 +99,7 @@ export function Orders() {
       {form && <OrderForm order={editing} onClose={() => setForm(null)} />}
       {removing && (
         <Confirm title={`حذف ${removing.id}؟`} action="حذف الطلب" onClose={() => setRemoving(null)}
-          body={`ستعود ${fmtQty(removing.quantity, removing.purchase.unit)} إلى ${removing.purchaseId} ككمية غير مقسَّمة، ويُحذف سجل الطلب.`}
+          body={`ستعود أصنافه إلى المخزون (${removing.goods})، ويُحذف سجل الطلب.`}
           onConfirm={() => {
             setDb((d) => ({ ...d, orders: d.orders.filter((o) => o.id !== removing.id) }))
             toast(`تم حذف ${removing.id}`)

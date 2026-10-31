@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type FormEvent, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { FILTERS, fmtCount } from '../lib/format'
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleDashed, PackageCheck, Search, Truck, UserCheck, X, TriangleAlert } from 'lucide-react'
-import type { OrderStatus } from '../types'
+import { FILTERS, fmtCount, fmtDateTime } from '../lib/format'
+import { Ban, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleDashed, Hourglass, PackageCheck, Search, Truck, UserCheck, X, TriangleAlert } from 'lucide-react'
+import type { OrderEvent, OrderStatus } from '../types'
 import { STATUS_LABEL } from '../lib/domain'
 import { PERIODS } from '../lib/period'
 
@@ -14,10 +14,27 @@ export function IconButton({ label, children, ...rest }: ButtonHTMLAttributes<HT
   return <button type="button" className="icon-btn" aria-label={label} title={label} {...rest}>{children}</button>
 }
 
-const STATUS_ICON = { unassigned: CircleDashed, assigned: UserCheck, picked: Truck, delivered: PackageCheck, failed: TriangleAlert }
+const STATUS_ICON = { unassigned: CircleDashed, assigned: Hourglass, accepted: UserCheck, denied: Ban, picked: Truck, delivered: PackageCheck, failed: TriangleAlert }
 export function StatusPill({ status }: { status: OrderStatus }) {
   const Icon = STATUS_ICON[status]
   return <span className={`pill pill-${status}`}><Icon size={14} aria-hidden />{STATUS_LABEL[status]}</span>
+}
+
+const EVENT_LABEL: Partial<Record<OrderStatus, string>> = { accepted: 'قبل المندوب الطلب', picked: 'استلم المندوب البضاعة', delivered: 'تم التوصيل' }
+export function Timeline({ events }: { events: OrderEvent[] }) {
+  return (
+    <ol className="timeline">
+      {[...events].reverse().map((e, i) => (
+        <li key={i}>
+          <i className={`seg seg-${e.status}`} />
+          <div>
+            <strong>{e.status === 'unassigned' && !e.note ? 'تم إنشاء الطلب' : e.status === 'denied' ? `رفض المندوب الطلب: ${e.note}` : e.note ?? EVENT_LABEL[e.status] ?? STATUS_LABEL[e.status]}</strong>
+            <span>{fmtDateTime(e.at)}، بواسطة {e.by}</span>
+          </div>
+        </li>
+      ))}
+    </ol>
+  )
 }
 
 export function PageHead({ title, count, children }: { title: string; count?: string; children?: ReactNode }) {

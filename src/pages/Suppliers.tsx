@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import type { Supplier } from '../types'
 import { useStore } from '../store'
-import { CATEGORIES, CITIES, nextId } from '../lib/domain'
-import { SUPPLIERS, PURCHASES, fmtCount, fmtMoney, fmtNum } from '../lib/format'
+import { CATEGORIES, CITIES, invoiceCost, nextId } from '../lib/domain'
+import { SUPPLIERS, INVOICES, fmtCount, fmtMoney, fmtNum } from '../lib/format'
 import { inRange, periodRange } from '../lib/period'
 import { textSearch } from '../lib/search'
 import { Button, Confirm, FilterBar, FormDrawer, IconButton, PageHead, PeriodFilter, RowActions, SearchBox, Select, Table, useFilters, type Col, type FieldSpec } from '../components/ui'
@@ -34,8 +34,8 @@ export function Suppliers() {
     const range = periodRange(f.period, f.from, f.to)
     return db.suppliers
       .map((s) => {
-        const bought = db.purchases.filter((p) => p.supplierId === s.id && inRange(p.date, range))
-        return { ...s, count: bought.length, spend: bought.reduce((n, p) => n + p.quantity * p.unitCost, 0) }
+        const bought = db.invoices.filter((p) => p.supplierId === s.id && inRange(p.date, range))
+        return { ...s, count: bought.length, spend: bought.reduce((n, p) => n + invoiceCost(p), 0) }
       })
       .filter((s) =>
         (!f.category || s.category === f.category) &&
@@ -64,7 +64,7 @@ export function Suppliers() {
     { key: 'name', label: 'المورد', render: (s) => <><strong>{s.name}</strong><small>{s.category}</small></>, sort: (s) => s.name },
     { key: 'contact', label: 'التواصل', render: (s) => <>{s.contact}<small><a dir="ltr" href={`tel:${s.phone}`}>{s.phone}</a></small></>, sort: (s) => s.contact },
     { key: 'city', label: 'المدينة', render: (s) => s.city, sort: (s) => s.city },
-    { key: 'count', label: 'المشتريات', right: true, render: (s) => can('purchases', 'view') ? <Link to={`/purchases?supplier=${s.id}`}>{fmtNum(s.count)}</Link> : fmtNum(s.count), sort: (s) => s.count },
+    { key: 'count', label: 'الفواتير', right: true, render: (s) => can('stock', 'view') ? <Link to={`/stock?supplier=${s.id}`}>{fmtNum(s.count)}</Link> : fmtNum(s.count), sort: (s) => s.count },
     { key: 'spend', label: 'الإنفاق', right: true, render: (s) => fmtMoney(s.spend), sort: (s) => s.spend },
     { key: 'state', label: 'الحالة', render: (s) => s.active ? 'نشط' : <span className="muted">غير نشط</span>, sort: (s) => (s.active ? 0 : 1) },
   ]
@@ -78,7 +78,7 @@ export function Suppliers() {
       ),
     })
   }
-  const linked = removing ? db.purchases.filter((p) => p.supplierId === removing.id).length : 0
+  const linked = removing ? db.invoices.filter((p) => p.supplierId === removing.id).length : 0
 
   return (
     <>
@@ -100,9 +100,9 @@ export function Suppliers() {
           initial={{ name: form.item?.name ?? '', contact: form.item?.contact ?? '', phone: form.item?.phone ?? '', email: form.item?.email ?? '', city: form.item?.city ?? '', category: form.item?.category ?? '', active: form.item && !form.item.active ? 'inactive' : 'active' }} />
       )}
       {removing && (linked > 0 ? (
-        <Confirm title={`لا يمكن حذف ${removing.name}`} onClose={() => setRemoving(null)} body={`يرتبط بهذا المورد ${fmtCount(linked, PURCHASES)}. اجعله غير نشط بدلًا من حذفه لتبقى التقارير صحيحة.`} />
+        <Confirm title={`لا يمكن حذف ${removing.name}`} onClose={() => setRemoving(null)} body={`يرتبط بهذا المورد ${fmtCount(linked, INVOICES)}. اجعله غير نشط بدلًا من حذفه لتبقى التقارير صحيحة.`} />
       ) : (
-        <Confirm title={`حذف ${removing.name}؟`} action="حذف المورد" body="لا توجد مشتريات من هذا المورد، فلن يتغير شيء آخر." onClose={() => setRemoving(null)}
+        <Confirm title={`حذف ${removing.name}؟`} action="حذف المورد" body="لا توجد فواتير من هذا المورد، فلن يتغير شيء آخر." onClose={() => setRemoving(null)}
           onConfirm={() => {
             setDb((d) => ({ ...d, suppliers: d.suppliers.filter((s) => s.id !== removing.id) }))
             toast(`تم حذف ${removing.name}`)
