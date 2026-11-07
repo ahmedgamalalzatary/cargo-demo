@@ -11,12 +11,10 @@
   --tape-deep: #e6b400;
 
   --s-unassigned: #8a9299;
-  --s-assigned: #b98900;
-  --s-accepted: #3c444c;
-  --s-denied: #8e3fa8;
-  --s-picked: #2f6bd8;
+  --s-assigned: #2f6bd8;
   --s-delivered: #0e8f6a;
-  --s-failed: #d43d3d;
+  --s-refunded: #d43d3d;
+  --focus: #2f6bd8;
 
   --display: 'Alexandria', 'IBM Plex Sans Arabic', sans-serif;
   --body: 'IBM Plex Sans Arabic', Tahoma, sans-serif;
@@ -36,7 +34,7 @@ ul, ol { list-style: none; }
 a { color: inherit; text-underline-offset: 2px; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
-:focus-visible { outline: 2px solid var(--s-picked); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 small { display: block; font-size: 13px; color: var(--ink-3); }
 .muted { color: var(--ink-3); }
 .id { font-weight: 600; white-space: nowrap; direction: ltr; unicode-bidi: isolate; }
@@ -75,19 +73,15 @@ input[type='checkbox'] { width: 17px; height: 17px; accent-color: var(--ink); ma
 .icon-btn:hover:not(:disabled) { background: var(--line-2); color: var(--ink); }
 .icon-btn:disabled { opacity: .3; cursor: not-allowed; }
 
-/* Status: the same colour on pills, cut bars, charts and timelines */
+/* Status: the same colour on pills, charts and timelines */
 .seg { display: block; background: var(--c); }
 .seg-unassigned { --c: var(--s-unassigned); }
 .seg-assigned { --c: var(--s-assigned); }
-.seg-accepted { --c: var(--s-accepted); }
-.seg-denied { --c: var(--s-denied); }
-.seg-picked { --c: var(--s-picked); }
 .seg-delivered { --c: var(--s-delivered); }
-.seg-failed {
-  --c: var(--s-failed);
-  background: repeating-linear-gradient(135deg, var(--s-failed) 0 3px, #eb8b8b 3px 5px);
+.seg-refunded {
+  --c: var(--s-refunded);
+  background: repeating-linear-gradient(135deg, var(--s-refunded) 0 3px, #eb8b8b 3px 5px);
 }
-.seg-uncut { background: repeating-linear-gradient(135deg, var(--line) 0 2px, var(--white) 2px 6px); box-shadow: inset 0 0 0 1px var(--line); }
 
 .pill {
   display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
@@ -95,20 +89,18 @@ input[type='checkbox'] { width: 17px; height: 17px; accent-color: var(--ink); ma
 }
 .pill svg { flex: none; }
 .pill-unassigned { color: #5c656d; }
-.pill-assigned { color: #7f5e00; }
-.pill-accepted { color: var(--s-accepted); }
-.pill-denied { color: #7b3192; }
-.pill-picked { color: #2259bd; }
+.pill-assigned { color: #2259bd; }
 .pill-delivered { color: #0a7557; }
-.pill-failed { color: #b92c2c; }
+.pill-refunded { color: #b92c2c; }
+.ret-pending { color: #7f5e00; font-weight: 500; }
+.ret-back { color: #0a7557; }
+.ret-missing { color: #b92c2c; font-weight: 600; }
 
-/* The cut bar */
-.cutbar { display: flex; gap: 2px; height: 12px; min-width: 150px; width: 100%; }
-.cutbar .seg { flex: 1 1 0; min-width: 2px; padding: 0; border: 0; border-radius: 0; }
-.cutbar-lg { height: 44px; gap: 3px; }
-.cutbar-lg button.seg:hover { outline: 2px solid var(--black); outline-offset: 1px; }
-.cut-cell { min-width: 190px; }
-.cut-cell small { margin-top: 4px; }
+/* Plain progress text on the stock pages, no colours */
+.progress-text { font-size: 14px; color: var(--ink-2); white-space: normal; }
+.progress-text b { color: var(--ink); font-weight: 600; }
+.progress-text > span { white-space: nowrap; }
+.progress-text { display: inline-block; min-width: 160px; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--ink-2); }
 .legend li { display: flex; align-items: center; gap: 6px; }
 .legend .seg { width: 16px; height: 10px; }
@@ -157,7 +149,7 @@ input[type='checkbox'] { width: 17px; height: 17px; accent-color: var(--ink); ma
   display: flex; align-items: center; gap: 10px; padding: 0 12px;
   background: var(--white); border: 1px solid #b4bbc0; border-radius: 2px;
 }
-.search:focus-within { outline: 2px solid var(--s-picked); outline-offset: 1px; }
+.search:focus-within { outline: 2px solid var(--focus); outline-offset: 1px; }
 .search input { border: 0; padding-inline-start: 0; min-height: 44px; outline: none; background: none; }
 .search svg { flex: none; color: var(--ink-3); }
 .chips, .examples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; color: var(--ink-2); }
@@ -243,22 +235,37 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
 .lines legend { padding: 0 6px; font: 600 16px/1.5 var(--display); }
 .lines > .btn { justify-self: start; }
 .line-row { display: grid; gap: 8px; align-items: start; padding-bottom: 12px; border-bottom: 1px solid var(--line-2); }
-.line-row-order { grid-template-columns: minmax(0, 1fr) 120px 36px; }
-.line-row-invoice { grid-template-columns: minmax(0, 1fr) 84px 96px 96px 36px; }
+.line-row-item { grid-template-columns: minmax(0, 1fr) 150px 90px 36px; }
 .line-row .icon-btn { margin-top: 25px; }
 .foot-total { margin-inline-end: auto; align-self: center; font-size: 14px; color: var(--ink-2); }
 .foot-total b { font: 600 18px/1.3 var(--display); color: var(--ink); }
 
 .item-list { display: grid; gap: 6px; }
 .item-list b { font-weight: 600; }
-.notice { padding: 9px 12px; margin-block: 10px; font-size: 14px; background: #f6edf9; border-inline-start: 4px solid var(--s-denied); }
+.notice { padding: 9px 12px; margin-block: 10px; font-size: 14px; background: #fbeeee; border-inline-start: 4px solid var(--s-refunded); }
 .clamp { max-width: 340px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 /* Invoice lines */
-.invoice-lines { display: grid; gap: 14px; }
-.invoice-line-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; margin-bottom: 6px; font-size: 14px; color: var(--ink-2); }
-.invoice-line-head strong { font-size: 15px; font-weight: 600; color: var(--ink); }
-.invoice-lines .cutbar-lg { height: 26px; }
+.totals { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 6px 18px; font-size: 14px; }
+.totals li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line-2); }
+.totals li small { display: inline; margin-inline-start: 6px; }
+.totals b { font-weight: 600; white-space: nowrap; }
+.totals-head { font: 600 16px/1.5 var(--display); }
+
+/* Purchase invoice form: one card per client order */
+.order-cards { display: grid; gap: 14px; }
+.order-card { display: grid; gap: 12px; padding: 14px; background: var(--white); border: 1px solid var(--line); }
+.order-card-head { display: flex; align-items: center; gap: 10px; }
+.order-card-head h3 { font: 600 16px/1.4 var(--display); margin-inline-end: auto; }
+.order-card .form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.order-card .lines { padding: 10px; }
+.order-card .lines legend { font-size: 14px; }
+.invoice-summary { display: grid; gap: 10px; padding: 14px; background: var(--page); border: 1px solid var(--line); }
+.supplier-pick { display: flex; gap: 8px; align-items: end; }
+.supplier-pick .field { flex: 1; }
+.reason-text { font-size: 14px; max-width: 320px; white-space: normal; }
+.refund-box { padding: 12px; margin-block: 10px; background: #fbeeee; border-inline-start: 4px solid var(--s-refunded); display: grid; gap: 8px; font-size: 14px; }
+.refund-box .confirm-actions, .refund-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* Delivery man: one card per job, with the next action always visible */
 .tab-count { display: inline-block; min-width: 22px; padding-inline: 5px; margin-inline-start: 4px; font-size: 13px; text-align: center; background: var(--line-2); color: var(--ink); border-radius: 2px; }
@@ -440,13 +447,12 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
   .table td[data-label=''] { position: absolute; top: 4px; inset-inline-end: 6px; width: auto; padding: 0; display: block; }
   .table td.check-cell { display: none; }
   .cut-cell { min-width: 0; }
-  .cutbar { min-width: 0; }
 
   .form-grid { grid-template-columns: minmax(0, 1fr); }
-  .line-row-order { grid-template-columns: minmax(0, 1fr) 36px; }
-  .line-row-order > .field:first-child { grid-column: 1 / -1; }
-  .line-row-invoice { grid-template-columns: 1fr 1fr; }
-  .line-row-invoice > .field:first-child { grid-column: 1 / -1; }
+  .line-row-item { grid-template-columns: minmax(0, 1fr) 90px 36px; }
+  .line-row-item > .field:first-child { grid-column: 1 / -1; }
+  .order-card .form-grid { grid-template-columns: minmax(0, 1fr); }
+  .supplier-pick { flex-wrap: wrap; }
   .clamp { max-width: none; white-space: normal; }
   .drawer-body { padding: 16px; }
   .drawer-head, .drawer-foot { padding-inline: 16px; }

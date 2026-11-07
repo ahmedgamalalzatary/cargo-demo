@@ -26,14 +26,13 @@ export const INVOICES: Noun = ['فاتورة', 'فاتورتان', 'فواتير
 export const PRODUCTS: Noun = ['صنف', 'صنفان', 'أصناف']
 export const SUPPLIERS: Noun = ['مورد', 'موردان', 'موردين']
 export const DRIVERS: Noun = ['مندوب', 'مندوبان', 'مندوبين']
+export const REFUNDS: Noun = ['مرتجع', 'مرتجعان', 'مرتجعات']
 export const ACCOUNTS: Noun = ['حساب', 'حسابان', 'حسابات']
 export const FILTERS: Noun = ['فلتر', 'فلتران', 'فلاتر']
 export function fmtCount(n: number, [one, two, few]: Noun) {
   if (n === 2) return two
   return `${fmtNum(n)} ${n >= 3 && n <= 10 ? few : one}`
 }
-const UNIT_PLURAL: Record<string, string> = { 'كرتونة': 'كراتين', 'شوال': 'شوالات', 'بالة': 'بالات', 'بالتة': 'بالتات', 'قطعة': 'قطع' }
-export const fmtQty = (n: number, unit: string) => `${fmtNum(n)} ${n >= 3 && n <= 10 ? UNIT_PLURAL[unit] ?? unit : unit}`
 
 export const toDateInput = (t: number) => {
   const d = new Date(t)

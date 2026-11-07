@@ -27,7 +27,7 @@ export function Orders() {
       inRange(o.createdAt, range) &&
       (!f.status || o.status === f.status) &&
       (!f.driver || o.driverId === f.driver) &&
-      (!f.supplier || o.suppliers.some((s) => s.id === f.supplier)) &&
+      (!f.supplier || o.supplier.id === f.supplier) &&
       (!f.zone || o.zone === f.zone) &&
       matchesParsed(o, parsed))
   }, [db, f, parsed])
@@ -35,12 +35,12 @@ export function Orders() {
   const canEdit = can('orders', 'edit')
   const canDelete = can('orders', 'delete')
   const cols: Col<OrderRow>[] = [
-    { key: 'id', label: 'الطلب', render: (o) => <strong className="id">{o.id}</strong>, sort: (o) => o.id },
-    { key: 'status', label: 'الحالة', render: (o) => <StatusPill status={o.status} />, sort: (o) => STATUS_ORDER.indexOf(o.status) },
-    { key: 'goods', label: 'الأصناف', render: (o) => <>{o.goods}<small>{o.rows.length > 1 ? `${fmtCount(o.rows.length, PRODUCTS)}، ` : ''}{o.suppliers.map((s) => s.name).join('، ')}</small></>, sort: (o) => o.rows.length },
+    { key: 'id', label: 'الطلب', render: (o) => <><strong className="id">{o.id}</strong>{o.code && <small dir="ltr">{o.code}</small>}</>, sort: (o) => o.id },
+    { key: 'status', label: 'الحالة', render: (o) => <><StatusPill status={o.status} />{o.refund && <small className="reason-text">{o.refund.reason}</small>}</>, sort: (o) => STATUS_ORDER.indexOf(o.status) },
+    { key: 'goods', label: 'الأصناف', render: (o) => <>{o.goods}<small>{o.items.length > 1 ? `${fmtCount(o.items.length, PRODUCTS)}، ` : ''}{o.invoice.id}، {o.supplier.name}</small></>, sort: (o) => o.items.length },
     { key: 'client', label: 'العميل', render: (o) => <>{o.client}<small>{o.zone}</small></>, sort: (o) => o.client },
     { key: 'driver', label: 'المندوب', render: (o) => o.driver?.name ?? <span className="muted">غير مسند</span>, sort: (o) => o.driver?.name ?? '' },
-    { key: 'price', label: 'السعر', right: true, render: (o) => fmtMoney(o.price), sort: (o) => o.price },
+    { key: 'price', label: 'السعر', right: true, render: (o) => <>{fmtMoney(o.price)}<small>+ توصيل {fmtMoney(o.fee)}</small></>, sort: (o) => o.price },
     { key: 'created', label: 'تاريخ الإنشاء', render: (o) => fmtDateTime(o.createdAt), sort: (o) => o.createdAt },
   ]
   if (canEdit || canDelete) {
@@ -71,7 +71,7 @@ export function Orders() {
       <PageHead title="الطلبات" count={`${fmtCount(rows.length, ORDERS)}، بإجمالي ${fmtMoney(rows.reduce((n, o) => n + o.price, 0))}`}>
         {can('orders', 'create') && <Button variant="primary" onClick={() => setForm({})}><Plus size={17} aria-hidden />طلب جديد</Button>}
       </PageHead>
-      <SearchBox value={f.q} onChange={(q) => set({ q })} chips={parsed.chips} placeholder='جرّب: فشل التوصيل في الجيزة الأسبوع الماضي أكثر من 500، أو: كريم أرز' />
+      <SearchBox value={f.q} onChange={(q) => set({ q })} chips={parsed.chips} placeholder='جرّب: مرتجع في الجيزة الأسبوع الماضي أكثر من 500، أو: كريم أرز' />
       <FilterBar active={active} onClear={clear}>
         <PeriodFilter period={f.period} from={f.from} to={f.to} onChange={set} />
         <Select label="الحالة" all="كل الحالات" value={f.status} onChange={(status) => set({ status })} options={STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABEL[s] }))} />
@@ -99,7 +99,7 @@ export function Orders() {
       {form && <OrderForm order={editing} onClose={() => setForm(null)} />}
       {removing && (
         <Confirm title={`حذف ${removing.id}؟`} action="حذف الطلب" onClose={() => setRemoving(null)}
-          body={`ستعود أصنافه إلى المخزون (${removing.goods})، ويُحذف سجل الطلب.`}
+          body={`سيُحذف الطلب (${removing.goods}) من ${removing.invoice.id} مع سجله.`}
           onConfirm={() => {
             setDb((d) => ({ ...d, orders: d.orders.filter((o) => o.id !== removing.id) }))
             toast(`تم حذف ${removing.id}`)

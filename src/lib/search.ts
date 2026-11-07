@@ -91,13 +91,10 @@ export function parseQuery(query: string, db: Db): Parsed {
   if ((m = s.match(/(?:اقل من|تحت|<)\s*(\d+)/))) { s = s.replace(m[0], ' '); out.max = +m[1]; out.chips.push(`أقل من ${m[1]} ج.م`) }
 
   const statuses: [string, OrderStatus][] = [
-    ['فشل(?:\\s+التوصيل)?|فاشل|فاشله|مرتجع|مرتجعه', 'failed'],
+    ['مرتجع|مرتجعه|مرتجعات|رجع|فشل(?:\\s+التوصيل)?|فاشل|فاشله', 'refunded'],
     ['غير\\s+مسند|غير\\s+مسنده|مش\\s+مسند|منتظر', 'unassigned'],
-    ['تم\\s+الاستلام|استلام|استلم|استلمها|استلمه', 'picked'],
     ['تم\\s+التوصيل|توصيل|وصل|وصلت|اتوصل|مكتمل', 'delivered'],
-    ['رفض|رفضه|مرفوض|مرفوضه', 'denied'],
-    ['قبل|قبله|مقبول|مقبوله', 'accepted'],
-    ['مسند|مسنده|بانتظار(?:\\s+الرد)?', 'assigned'],
+    ['مع\\s+المندوب|مسند|مسنده|في\\s+الطريق', 'assigned'],
   ]
   if (take(phrase('لم\\s+يصل|لم\\s+تصل|لسه\\s+موصلش|مفتوح|مفتوحه'))) { out.open = true; out.chips.push('لم يصل بعد') }
   else for (const [re, st] of statuses) {
@@ -111,7 +108,7 @@ export function parseQuery(query: string, db: Db): Parsed {
   }
 
   const nameWords = (name: string) => wordsOf(name).filter((w) => w.length > 2)
-  const productWords = new Set(db.invoices.flatMap((p) => p.lines.flatMap((l) => wordsOf(l.product))))
+  const productWords = new Set(db.orders.flatMap((o) => o.items.flatMap((i) => wordsOf(i.product))))
   for (const token of s.split(/\s+/).filter(Boolean)) {
     if (STOP.has(token)) continue
     if (productWords.has(token)) { out.terms.push(token); continue }
@@ -129,13 +126,13 @@ export function parseQuery(query: string, db: Db): Parsed {
 }
 
 export const orderText = (o: OrderRow) =>
-  [o.id, ...o.invoiceIds, o.client, o.phone, o.address, o.zone, ...o.rows.map((r) => r.line.product), ...o.suppliers.map((s) => s.name), o.driver?.name ?? ''].join(' ')
+  [o.id, o.code, o.invoice.id, o.client, o.phone, o.address, o.zone, ...o.items.flatMap((i) => [i.product, i.category]), o.supplier.name, o.driver?.name ?? '', o.refund?.reason ?? ''].join(' ')
 
 export function matchesParsed(o: OrderRow, p: Parsed, at = o.createdAt) {
   if (p.status && o.status !== p.status) return false
-  if (p.open && (o.status === 'delivered' || o.status === 'failed')) return false
+  if (p.open && (o.status === 'delivered' || o.status === 'refunded')) return false
   if (p.driverId && o.driverId !== p.driverId) return false
-  if (p.supplierId && !o.suppliers.some((s) => s.id === p.supplierId)) return false
+  if (p.supplierId && o.supplier.id !== p.supplierId) return false
   if (p.zone && o.zone !== p.zone) return false
   if (p.min !== undefined && o.price <= p.min) return false
   if (p.max !== undefined && o.price >= p.max) return false

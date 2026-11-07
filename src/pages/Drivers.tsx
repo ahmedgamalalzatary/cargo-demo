@@ -3,14 +3,14 @@ import { Link } from 'react-router-dom'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import type { Driver } from '../types'
 import { useStore } from '../store'
-import { VEHICLES, ZONES, emailTaken, nextId } from '../lib/domain'
+import { VEHICLES, ZONES, closings, emailTaken, nextId, successRate } from '../lib/domain'
 import { DRIVERS, ORDERS, fmtCount, fmtNum, fmtPct } from '../lib/format'
 import { inRange, periodRange } from '../lib/period'
 import { textSearch } from '../lib/search'
 import { Button, Confirm, FilterBar, FormDrawer, IconButton, PageHead, PeriodFilter, RowActions, SearchBox, Select, Table, useFilters, type Col, type FieldSpec } from '../components/ui'
 
 const DEFAULTS = { q: '', period: 'all', from: '', to: '', zone: '', vehicle: '', state: '' }
-type Row = Driver & { open: number; delivered: number; failed: number; rate: number | null }
+type Row = Driver & { open: number; delivered: number; refunded: number; rate: number | null }
 const list = (items: string[]) => items.map((x) => ({ value: x, label: x }))
 const STATES = [{ value: 'active', label: 'نشط' }, { value: 'inactive', label: 'غير نشط' }]
 
@@ -35,10 +35,12 @@ export function Drivers() {
     const range = periodRange(f.period, f.from, f.to)
     return db.drivers
       .map((d) => {
-        const own = db.orders.filter((o) => o.driverId === d.id && inRange(o.createdAt, range))
-        const delivered = own.filter((o) => o.status === 'delivered').length
-        const failed = own.filter((o) => o.status === 'failed').length
-        return { ...d, open: own.length - delivered - failed, delivered, failed, rate: delivered + failed ? (delivered / (delivered + failed)) * 100 : null }
+        /* Read from the order log, so a refund still counts after the order goes to someone else. */
+        const closed = db.orders.flatMap((o) => closings(o).filter((e) => e.driverId === d.id && inRange(e.at, range)))
+        const delivered = closed.filter((e) => e.status === 'delivered').length
+        const refunded = closed.length - delivered
+        const open = db.orders.filter((o) => o.driverId === d.id && o.status === 'assigned').length
+        return { ...d, open, delivered, refunded, rate: successRate(delivered, refunded) }
       })
       .filter((d) =>
         (!f.zone || d.zone === f.zone) &&
@@ -68,7 +70,7 @@ export function Drivers() {
     { key: 'zone', label: 'المنطقة الأساسية', render: (d) => d.zone, sort: (d) => d.zone },
     { key: 'open', label: 'معه الآن', right: true, render: (d) => can('orders', 'view') ? <Link to={`/orders?driver=${d.id}`}>{fmtNum(d.open)}</Link> : fmtNum(d.open), sort: (d) => d.open },
     { key: 'delivered', label: 'تم التوصيل', right: true, render: (d) => fmtNum(d.delivered), sort: (d) => d.delivered },
-    { key: 'failed', label: 'فشل', right: true, render: (d) => fmtNum(d.failed), sort: (d) => d.failed },
+    { key: 'refunded', label: 'مرتجع', right: true, render: (d) => can('orders', 'view') ? <Link to={`/refunds?driver=${d.id}&state=all`}>{fmtNum(d.refunded)}</Link> : fmtNum(d.refunded), sort: (d) => d.refunded },
     { key: 'rate', label: 'نسبة النجاح', right: true, render: (d) => (d.rate === null ? <span className="muted">لا بيانات</span> : fmtPct(d.rate)), sort: (d) => d.rate ?? -1 },
     { key: 'state', label: 'الحالة', render: (d) => d.active ? 'نشط' : <span className="muted">غير نشط</span>, sort: (d) => (d.active ? 0 : 1) },
   ]

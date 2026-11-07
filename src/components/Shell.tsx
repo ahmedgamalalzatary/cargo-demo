@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Boxes, ChartColumn, ClipboardList, Factory, History, LogOut, Menu, PackageOpen, RotateCcw, ShieldCheck, Truck, X } from 'lucide-react'
+import { Boxes, ChartColumn, ClipboardList, Factory, History, LogOut, Menu, PackageOpen, RotateCcw, ShieldCheck, Truck, Undo2, X } from 'lucide-react'
 import type { Module } from '../types'
 import { useStore } from '../store'
 import { Confirm } from './ui'
@@ -8,6 +8,7 @@ import { Logo } from './Logo'
 
 const NAV: { to: string; label: string; icon: typeof Boxes; module?: Module }[] = [
   { to: '/orders', label: 'الطلبات', icon: Boxes, module: 'orders' },
+  { to: '/refunds', label: 'المرتجعات', icon: Undo2, module: 'orders' },
   { to: '/stock', label: 'المخزون', icon: PackageOpen, module: 'stock' },
   { to: '/suppliers', label: 'الموردون', icon: Factory, module: 'suppliers' },
   { to: '/drivers', label: 'المندوبون', icon: Truck, module: 'drivers' },

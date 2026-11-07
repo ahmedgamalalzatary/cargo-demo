@@ -5,6 +5,7 @@ import { StoreProvider, useStore } from './store'
 import { Shell } from './components/Shell'
 import { Login } from './pages/Login'
 import { Orders } from './pages/Orders'
+import { Refunds } from './pages/Refunds'
 import { Stock } from './pages/Stock'
 import { StockInvoice } from './pages/StockInvoice'
 import { Suppliers } from './pages/Suppliers'
@@ -67,6 +68,7 @@ function Routed() {
     <Routes>
       <Route element={<Shell />}>
         <Route path="/orders" element={<Guard module="orders"><Orders /></Guard>} />
+        <Route path="/refunds" element={<Guard module="orders"><Refunds /></Guard>} />
         <Route path="/stock" element={<Guard module="stock"><Stock /></Guard>} />
         <Route path="/stock/:id" element={<Guard module="stock"><StockInvoice /></Guard>} />
         <Route path="/suppliers" element={<Guard module="suppliers"><Suppliers /></Guard>} />

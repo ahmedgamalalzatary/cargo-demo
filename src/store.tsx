@@ -3,7 +3,7 @@ import type { Action, Db, Driver, Module, Staff } from './types'
 import { can as canDo } from './lib/domain'
 import { createSeed } from './lib/seed'
 
-const DB_KEY = 'tajzia-db-ar-v2'
+const DB_KEY = 'tajzia-db-ar-v3'
 const SESSION_KEY = 'tajzia-session-ar'
 
 function read<T>(key: string): T | null {

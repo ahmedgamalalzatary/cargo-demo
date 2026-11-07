@@ -3,26 +3,16 @@ import { Link } from 'react-router-dom'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import type { Supplier } from '../types'
 import { useStore } from '../store'
-import { CATEGORIES, CITIES, invoiceCost, nextId } from '../lib/domain'
-import { SUPPLIERS, INVOICES, fmtCount, fmtMoney, fmtNum } from '../lib/format'
+import { CATEGORIES, CITIES, SUPPLIER_STATES as STATES, successRate } from '../lib/domain'
+import { SUPPLIERS, INVOICES, fmtCount, fmtMoney, fmtNum, fmtPct } from '../lib/format'
 import { inRange, periodRange } from '../lib/period'
 import { textSearch } from '../lib/search'
-import { Button, Confirm, FilterBar, FormDrawer, IconButton, PageHead, PeriodFilter, RowActions, SearchBox, Select, Table, useFilters, type Col, type FieldSpec } from '../components/ui'
+import { Button, Confirm, FilterBar, IconButton, PageHead, PeriodFilter, RowActions, SearchBox, Select, Table, useFilters, type Col } from '../components/ui'
+import { SupplierForm } from '../components/SupplierForm'
 
 const DEFAULTS = { q: '', period: 'all', from: '', to: '', category: '', city: '', state: '' }
-type Row = Supplier & { count: number; spend: number }
+type Row = Supplier & { count: number; spend: number; orders: number; open: number; delivered: number; refunded: number; rate: number | null }
 const list = (items: string[]) => items.map((x) => ({ value: x, label: x }))
-const STATES = [{ value: 'active', label: 'نشط' }, { value: 'inactive', label: 'غير نشط' }]
-
-const FIELDS: FieldSpec[] = [
-  { name: 'name', label: 'اسم الشركة', required: true, full: true },
-  { name: 'contact', label: 'مسؤول التواصل', required: true },
-  { name: 'phone', label: 'الهاتف', type: 'tel', required: true },
-  { name: 'email', label: 'البريد الإلكتروني', type: 'email', full: true },
-  { name: 'city', label: 'المدينة', type: 'select', required: true, options: list(CITIES) },
-  { name: 'category', label: 'الفئة', type: 'select', required: true, options: list(CATEGORIES) },
-  { name: 'active', label: 'الحالة', type: 'select', required: true, options: STATES },
-]
 
 export function Suppliers() {
   const { db, setDb, can, toast } = useStore()
@@ -34,8 +24,11 @@ export function Suppliers() {
     const range = periodRange(f.period, f.from, f.to)
     return db.suppliers
       .map((s) => {
-        const bought = db.invoices.filter((p) => p.supplierId === s.id && inRange(p.date, range))
-        return { ...s, count: bought.length, spend: bought.reduce((n, p) => n + invoiceCost(p), 0) }
+        const bought = new Set(db.invoices.filter((p) => p.supplierId === s.id && inRange(p.date, range)).map((p) => p.id))
+        const own = db.orders.filter((o) => bought.has(o.invoiceId))
+        const delivered = own.filter((o) => o.status === 'delivered').length
+        const refunded = own.filter((o) => o.status === 'refunded').length
+        return { ...s, count: bought.size, spend: own.reduce((n, o) => n + o.price, 0), orders: own.length, open: own.length - delivered - refunded, delivered, refunded, rate: successRate(delivered, refunded) }
       })
       .filter((s) =>
         (!f.category || s.category === f.category) &&
@@ -45,19 +38,6 @@ export function Suppliers() {
         textSearch(`${s.name} ${s.contact} ${s.phone} ${s.email} ${s.city} ${s.category}`, f.q))
   }, [db, f])
 
-  const save = (v: Record<string, string>) => {
-    const data = { name: v.name.trim(), contact: v.contact.trim(), phone: v.phone.trim(), email: v.email.trim(), city: v.city, category: v.category, active: v.active === 'active' }
-    if (form?.item) {
-      const id = form.item.id
-      setDb((d) => ({ ...d, suppliers: d.suppliers.map((s) => (s.id === id ? { ...s, ...data } : s)) }))
-      toast(`تم حفظ ${data.name}`)
-    } else {
-      setDb((d) => ({ ...d, suppliers: [{ id: nextId(d.suppliers, 'S-', 0), createdAt: Date.now(), ...data }, ...d.suppliers] }))
-      toast(`تمت إضافة ${data.name}`)
-    }
-    setForm(null)
-  }
-
   const canEdit = can('suppliers', 'edit')
   const canDelete = can('suppliers', 'delete')
   const cols: Col<Row>[] = [
@@ -65,7 +45,11 @@ export function Suppliers() {
     { key: 'contact', label: 'التواصل', render: (s) => <>{s.contact}<small><a dir="ltr" href={`tel:${s.phone}`}>{s.phone}</a></small></>, sort: (s) => s.contact },
     { key: 'city', label: 'المدينة', render: (s) => s.city, sort: (s) => s.city },
     { key: 'count', label: 'الفواتير', right: true, render: (s) => can('stock', 'view') ? <Link to={`/stock?supplier=${s.id}`}>{fmtNum(s.count)}</Link> : fmtNum(s.count), sort: (s) => s.count },
-    { key: 'spend', label: 'الإنفاق', right: true, render: (s) => fmtMoney(s.spend), sort: (s) => s.spend },
+    { key: 'spend', label: 'إجمالي الطلبات', right: true, render: (s) => fmtMoney(s.spend), sort: (s) => s.spend },
+    { key: 'orders', label: 'الطلبات', right: true, render: (s) => fmtNum(s.orders), sort: (s) => s.orders },
+    { key: 'delivered', label: 'تم التوصيل', right: true, render: (s) => fmtNum(s.delivered), sort: (s) => s.delivered },
+    { key: 'refunded', label: 'مرتجع', right: true, render: (s) => fmtNum(s.refunded), sort: (s) => s.refunded },
+    { key: 'rate', label: 'نسبة النجاح', right: true, render: (s) => (s.rate === null ? <span className="muted">لا بيانات</span> : fmtPct(s.rate)), sort: (s) => s.rate ?? -1 },
     { key: 'state', label: 'الحالة', render: (s) => s.active ? 'نشط' : <span className="muted">غير نشط</span>, sort: (s) => (s.active ? 0 : 1) },
   ]
   if (canEdit || canDelete) {
@@ -95,10 +79,7 @@ export function Suppliers() {
       <Table rows={rows} cols={cols} rowKey={(s) => s.id} sort={{ key: 'spend', dir: -1 }}
         empty={<><h2>لا يوجد موردون مطابقون</h2><p>غيّر البحث أو امسح الفلاتر لعرض موردين أكثر.</p></>} />
 
-      {form && (
-        <FormDrawer title={form.item ? `تعديل ${form.item.name}` : 'إضافة مورد'} action={form.item ? 'حفظ المورد' : 'إضافة المورد'} fields={FIELDS} onSave={save} onClose={() => setForm(null)}
-          initial={{ name: form.item?.name ?? '', contact: form.item?.contact ?? '', phone: form.item?.phone ?? '', email: form.item?.email ?? '', city: form.item?.city ?? '', category: form.item?.category ?? '', active: form.item && !form.item.active ? 'inactive' : 'active' }} />
-      )}
+      {form && <SupplierForm item={form.item} onClose={() => setForm(null)} onSaved={() => setForm(null)} />}
       {removing && (linked > 0 ? (
         <Confirm title={`لا يمكن حذف ${removing.name}`} onClose={() => setRemoving(null)} body={`يرتبط بهذا المورد ${fmtCount(linked, INVOICES)}. اجعله غير نشط بدلًا من حذفه لتبقى التقارير صحيحة.`} />
       ) : (

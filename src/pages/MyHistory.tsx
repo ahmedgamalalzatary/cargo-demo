@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../store'
-import { STATUS_LABEL, ZONES, orderRows, pickedAt, type OrderRow } from '../lib/domain'
+import { STATUS_LABEL, ZONES, assignedAt, closings, orderRows, type OrderRow } from '../lib/domain'
 import { fmtDateTime, fmtDuration, fmtMoney, fmtNum, fmtPct } from '../lib/format'
 import { inRange, periodRange } from '../lib/period'
 import { orderText, textSearch } from '../lib/search'
 import { Drawer, FilterBar, PageHead, PeriodFilter, SearchBox, Select, StatusPill, Table, Timeline, useFilters, type Col } from '../components/ui'
 
 const DEFAULTS = { q: '', period: 'all', from: '', to: '', status: '', zone: '' }
-type Row = { key: string; order: OrderRow; at: number; status: 'delivered' | 'failed'; note?: string; took: number | null }
+type Row = { key: string; order: OrderRow; at: number; status: 'delivered' | 'refunded'; note?: string; took: number | null }
 
 export function MyHistory() {
   const { db, driver } = useStore()
@@ -15,11 +15,11 @@ export function MyHistory() {
   const [open, setOpen] = useState<Row | null>(null)
   const me = driver?.id
 
-  /* Read from the order log, so a failed order stays here even after it goes to another delivery man. */
-  const all = useMemo(() => orderRows(db).flatMap((order) => order.events.flatMap((e): Row[] => {
-    if (e.driverId !== me || (e.status !== 'delivered' && e.status !== 'failed')) return []
-    const picked = pickedAt({ ...order, events: order.events.filter((x) => x.at <= e.at) })
-    return [{ key: `${order.id}-${e.at}`, order, at: e.at, status: e.status, note: e.note, took: picked ? e.at - picked : null }]
+  /* Read from the order log, so a refunded order stays here even after it goes to another delivery man. */
+  const all = useMemo(() => orderRows(db).flatMap((order) => closings(order).flatMap((e): Row[] => {
+    if (e.driverId !== me || (e.status !== 'delivered' && e.status !== 'refunded')) return []
+    const given = assignedAt(order, e.at)
+    return [{ key: `${order.id}-${e.at}`, order, at: e.at, status: e.status, note: e.note, took: given ? e.at - given : null }]
   })), [db, me])
 
   const rows = useMemo(() => {
@@ -35,28 +35,28 @@ export function MyHistory() {
   const closed = rows.length
   const tiles: [string, string][] = [
     [fmtNum(delivered.length), 'تم توصيله'],
-    [fmtNum(closed - delivered.length), 'فشل توصيله'],
+    [fmtNum(closed - delivered.length), 'مرتجع'],
     [closed ? fmtPct((delivered.length / closed) * 100) : 'لا بيانات', 'نسبة النجاح'],
-    [fmtMoney(delivered.reduce((n, r) => n + r.order.price, 0)), 'إجمالي التحصيل'],
+    [fmtMoney(delivered.reduce((n, r) => n + r.order.collect, 0)), 'إجمالي التحصيل'],
   ]
   const cols: Col<Row>[] = [
     { key: 'at', label: 'وقت الإغلاق', render: (r) => fmtDateTime(r.at), sort: (r) => r.at },
     { key: 'id', label: 'الطلب', render: (r) => <strong className="id">{r.order.id}</strong>, sort: (r) => r.order.id },
-    { key: 'status', label: 'النتيجة', render: (r) => <><StatusPill status={r.status} />{r.note && <small>{r.note}</small>}</>, sort: (r) => r.status },
-    { key: 'goods', label: 'الأصناف', render: (r) => r.order.goods, sort: (r) => r.order.rows.length },
+    { key: 'status', label: 'النتيجة', render: (r) => <><StatusPill status={r.status} />{r.status === 'refunded' && r.note && <small className="reason-text">{r.note}</small>}</>, sort: (r) => r.status },
+    { key: 'goods', label: 'الأصناف', render: (r) => r.order.goods, sort: (r) => r.order.items.length },
     { key: 'client', label: 'العميل', render: (r) => <>{r.order.client}<small>{r.order.zone}</small></>, sort: (r) => r.order.client },
     { key: 'took', label: 'المدة', right: true, render: (r) => (r.took === null ? <span className="muted">لا بيانات</span> : fmtDuration(r.took)), sort: (r) => r.took ?? -1 },
-    { key: 'price', label: 'القيمة', right: true, render: (r) => fmtMoney(r.order.price), sort: (r) => r.order.price },
+    { key: 'price', label: 'القيمة', right: true, render: (r) => fmtMoney(r.order.collect), sort: (r) => r.order.collect },
   ]
 
   return (
     <>
-      <PageHead title="السجل" count="الطلبات التي أغلقتها، بالتوصيل أو الفشل" />
+      <PageHead title="السجل" count="الطلبات التي أغلقتها، بالتوصيل أو المرتجع" />
       <div className="tiles">{tiles.map(([v, l]) => <p key={l}><b>{v}</b>{l}</p>)}</div>
       <SearchBox value={f.q} onChange={(q) => set({ q })} placeholder="ابحث بالعميل أو الصنف أو العنوان أو رقم الطلب" />
       <FilterBar active={active} onClear={clear}>
         <PeriodFilter period={f.period} from={f.from} to={f.to} onChange={set} />
-        <Select label="النتيجة" all="كل النتائج" value={f.status} onChange={(status) => set({ status })} options={(['delivered', 'failed'] as const).map((s) => ({ value: s, label: STATUS_LABEL[s] }))} />
+        <Select label="النتيجة" all="كل النتائج" value={f.status} onChange={(status) => set({ status })} options={(['delivered', 'refunded'] as const).map((s) => ({ value: s, label: STATUS_LABEL[s] }))} />
         <Select label="المنطقة" all="كل المناطق" value={f.zone} onChange={(zone) => set({ zone })} options={ZONES.map((z) => ({ value: z, label: z }))} />
       </FilterBar>
       <Table rows={rows} cols={cols} rowKey={(r) => r.key} onRow={setOpen} sort={{ key: 'at', dir: -1 }}

@@ -1,7 +1,7 @@
 export type Module = 'suppliers' | 'stock' | 'drivers' | 'orders' | 'reports'
 export type Action = 'view' | 'create' | 'edit' | 'delete' | 'export'
 export type Permissions = Record<Module, Action[]>
-export type OrderStatus = 'unassigned' | 'assigned' | 'accepted' | 'denied' | 'picked' | 'delivered' | 'failed'
+export type OrderStatus = 'unassigned' | 'assigned' | 'delivered' | 'refunded'
 
 export interface Supplier {
   id: string
@@ -15,20 +15,12 @@ export interface Supplier {
   createdAt: number
 }
 
-export interface InvoiceLine {
-  id: string
-  product: string
-  unit: string
-  quantity: number
-  unitCost: number
-}
-
+/** A supplier's purchase invoice is a batch of client orders. */
 export interface Invoice {
   id: string
   supplierId: string
   date: number
   note: string
-  lines: InvoiceLine[]
 }
 
 export interface Driver {
@@ -54,14 +46,29 @@ export interface OrderEvent {
 }
 
 export interface OrderItem {
-  lineId: string
+  product: string
+  category: string
   quantity: number
+}
+
+/** Set when the delivery man brings an order back. `back` is filled in once an admin checks the goods came back. */
+export interface Refund {
+  reason: string
+  at: number
+  driverId: string
+  back?: boolean
 }
 
 export interface Order {
   id: string
+  invoiceId: string
+  /** The supplier's own reference for this order. */
+  code: string
   items: OrderItem[]
+  /** What the supplier charges for the order. */
   price: number
+  /** Our delivery fee, collected on top of the price. */
+  fee: number
   client: string
   phone: string
   address: string
@@ -70,6 +77,7 @@ export interface Order {
   status: OrderStatus
   createdAt: number
   events: OrderEvent[]
+  refund?: Refund
 }
 
 export interface Staff {

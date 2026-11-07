@@ -1,107 +1,150 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
-import type { Invoice } from '../types'
+import type { Invoice, Order } from '../types'
 import { useStore } from '../store'
-import { UNITS, allocations, nextId, unique } from '../lib/domain'
-import { fmtMoney, fmtNum, toDateInput } from '../lib/format'
+import { STATUS_LABEL, nextId, productTotals, unique } from '../lib/domain'
+import { ORDERS, fmtCount, fmtMoney, fmtNum, toDateInput } from '../lib/format'
 import { Button, Drawer, Field, IconButton } from './ui'
+import { OrderFields } from './OrderFields'
+import { checkDraft, draftFields, draftOf, type Errors, type OrderDraft } from '../lib/orderDraft'
+import { SupplierForm } from './SupplierForm'
 
-interface Row { key: number; id?: string; product: string; quantity: string; unit: string; unitCost: string }
-const blank = (key: number): Row => ({ key, product: '', quantity: '', unit: 'كرتونة', unitCost: '' })
-
+/* A supplier's purchase invoice is a batch of client orders, each with its own products, price and address. */
 export function InvoiceForm({ item, onClose }: { item?: Invoice; onClose: () => void }) {
-  const { db, setDb, toast } = useStore()
+  const { db, setDb, user, toast } = useStore()
+  const existing = useMemo(() => (item ? db.orders.filter((o) => o.invoiceId === item.id) : []), [db.orders, item])
   const [v, setV] = useState({ supplierId: item?.supplierId ?? '', date: toDateInput(item?.date ?? Date.now()), note: item?.note ?? '' })
-  const [rows, setRows] = useState<Row[]>(() =>
-    item ? item.lines.map((l, key) => ({ key, id: l.id, product: l.product, quantity: String(l.quantity), unit: l.unit, unitCost: String(l.unitCost) })) : [blank(0)])
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const taken = useMemo(() => allocations(db.orders), [db.orders])
-  const known = useMemo(() => unique(db.invoices.flatMap((p) => p.lines.map((l) => l.product))), [db.invoices])
+  const category = db.suppliers.find((s) => s.id === v.supplierId)?.category ?? ''
+  const [drafts, setDrafts] = useState<OrderDraft[]>(() => (existing.length ? existing.map((o, k) => draftOf(o, k)) : [draftOf(undefined, 0, category)]))
+  const [errors, setErrors] = useState<Errors>({})
+  const [addingSupplier, setAddingSupplier] = useState(false)
+  const products = useMemo(() => unique(db.orders.flatMap((o) => o.items.map((i) => i.product))).sort(), [db.orders])
   const suppliers = db.suppliers.filter((s) => s.active || s.id === item?.supplierId)
-  const total = rows.reduce((n, r) => n + (+r.quantity || 0) * (+r.unitCost || 0), 0)
+  const byId = new Map(existing.map((o) => [o.id, o]))
 
-  const setRow = (key: number, patch: Partial<Row>) => {
-    setRows((list) => list.map((r) => (r.key === key ? { ...r, ...patch } : r)))
-    setErrors((s) => ({ ...s, ...Object.fromEntries(Object.keys(patch).map((k) => [`${k}${key}`, ''])) }))
+  const parsed = drafts.map(draftFields)
+  const totals = productTotals(parsed.map((f) => ({ ...f, status: 'unassigned' }) as Order))
+  const price = parsed.reduce((n, f) => n + (f.price || 0), 0)
+  const fees = parsed.reduce((n, f) => n + (f.fee || 0), 0)
+
+  const clearError = (keys: string[]) => setErrors((s) => ({ ...s, ...Object.fromEntries(keys.map((k) => [k, ''])) }))
+  const setDraft = (next: OrderDraft) => setDrafts((list) => list.map((d) => (d.key === next.key ? next : d)))
+  const addDraft = () => setDrafts((list) => [...list, draftOf(undefined, Math.max(-1, ...list.map((d) => d.key)) + 1, category)])
+  /* Product rows still without a category take the supplier's own category. */
+  const pickSupplier = (id: string, cat = db.suppliers.find((s) => s.id === id)?.category) => {
+    setV((s) => ({ ...s, supplierId: id }))
+    clearError(['supplierId'])
+    if (cat) setDrafts((list) => list.map((d) => ({ ...d, items: d.items.map((i) => (i.category ? i : { ...i, category: cat })) })))
+  }
+  const closedOf = (d: OrderDraft) => {
+    const o = d.id ? byId.get(d.id) : undefined
+    return !!o && (o.status === 'delivered' || o.status === 'refunded')
   }
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    const err: Record<string, string> = {}
-    if (!v.supplierId) err.supplierId = 'اختر المورد.'
+    let err: Errors = {}
+    if (!v.supplierId) err.supplierId = 'اختر المورد أو أضف موردًا جديدًا.'
     if (!v.date) err.date = 'أدخل تاريخ الفاتورة.'
-    for (const r of rows) {
-      const cut = r.id ? taken.get(r.id) ?? 0 : 0
-      if (!r.product.trim()) err[`product${r.key}`] = 'أدخل اسم الصنف.'
-      if (!Number.isInteger(+r.quantity) || +r.quantity < 1) err[`quantity${r.key}`] = 'أدخل رقمًا صحيحًا 1 أو أكثر.'
-      else if (+r.quantity < cut) err[`quantity${r.key}`] = `تم تقسيم ${fmtNum(cut)} بالفعل.`
-      if (!(+r.unitCost > 0)) err[`unitCost${r.key}`] = 'أدخل التكلفة.'
-    }
+    for (const d of drafts) err = { ...err, ...checkDraft(d, `o${d.key}-`) }
     setErrors(err)
-    if (Object.keys(err).length) return
+    if (Object.values(err).some(Boolean) || !user) {
+      document.querySelector('.field-error')?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      return
+    }
 
-    const data = { supplierId: v.supplierId, date: new Date(`${v.date}T12:00:00`).getTime(), note: v.note.trim() }
+    const date = new Date(`${v.date}T12:00:00`).getTime()
+    const head = { supplierId: v.supplierId, date, note: v.note.trim() }
+    const now = Date.now()
     setDb((d) => {
-      let pool = d.invoices.flatMap((p) => p.lines)
-      const lines = rows.map((r) => {
-        const id = r.id ?? nextId(pool, 'L-', 0)
-        const line = { id, product: r.product.trim(), quantity: +r.quantity, unit: r.unit, unitCost: +r.unitCost }
-        pool = [...pool, line]
-        return line
-      })
-      return item
-        ? { ...d, invoices: d.invoices.map((p) => (p.id === item.id ? { ...p, ...data, lines } : p)) }
-        : { ...d, invoices: [{ id: nextId(d.invoices, 'INV-', 1000), ...data, lines }, ...d.invoices] }
+      const invoiceId = item?.id ?? nextId(d.invoices, 'INV-', 1000)
+      const kept = new Set(drafts.flatMap((x) => (x.id ? [x.id] : [])))
+      let pool = d.orders
+      const created: Order[] = []
+      for (const x of drafts) {
+        if (x.id) continue
+        const id = nextId(pool, 'ORD-', 20000)
+        const o: Order = { id, invoiceId, ...draftFields(x), driverId: null, status: 'unassigned', createdAt: now, events: [{ at: now, status: 'unassigned', by: user.name }] }
+        pool = [...pool, o]
+        created.push(o)
+      }
+      const edited = new Map(drafts.flatMap((x) => (x.id ? [[x.id, draftFields(x)] as const] : [])))
+      const orders = d.orders
+        .filter((o) => o.invoiceId !== invoiceId || kept.has(o.id))
+        .map((o) => {
+          const f = edited.get(o.id)
+          if (!f) return o
+          const closed = o.status === 'delivered' || o.status === 'refunded'
+          return { ...o, ...f, items: closed ? o.items : f.items }
+        })
+      return {
+        ...d,
+        invoices: item ? d.invoices.map((p) => (p.id === item.id ? { ...p, ...head } : p)) : [{ id: invoiceId, ...head }, ...d.invoices],
+        orders: [...created, ...orders],
+      }
     })
-    toast(item ? `تم حفظ ${item.id}` : 'تمت إضافة الفاتورة إلى المخزون')
+    toast(item ? `تم حفظ ${item.id}` : `تمت إضافة الفاتورة، ${fmtCount(drafts.length, ORDERS)}`)
     onClose()
   }
 
   return (
     <Drawer wide title={item ? `تعديل ${item.id}` : 'فاتورة شراء جديدة'} onClose={onClose}
-      footer={<><span className="foot-total">الإجمالي <b>{fmtMoney(total)}</b></span><Button onClick={onClose}>إلغاء</Button><Button variant="primary" type="submit" form="invoice-form">{item ? 'حفظ الفاتورة' : 'إضافة الفاتورة'}</Button></>}>
+      footer={<><span className="foot-total">{fmtCount(drafts.length, ORDERS)}، الإجمالي <b>{fmtMoney(price)}</b></span><Button onClick={onClose}>إلغاء</Button><Button variant="primary" type="submit" form="invoice-form">{item ? 'حفظ الفاتورة' : 'إضافة الفاتورة'}</Button></>}>
       <form id="invoice-form" className="form-grid" onSubmit={submit} noValidate>
-        <Field label="المورد" error={errors.supplierId}>
-          <select value={v.supplierId} onChange={(e) => { setV({ ...v, supplierId: e.target.value }); setErrors((s) => ({ ...s, supplierId: '' })) }}>
-            <option value="">اختر</option>
-            {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        </Field>
+        <div className="supplier-pick">
+          <Field label="المورد" error={errors.supplierId}>
+            <select value={v.supplierId} onChange={(e) => pickSupplier(e.target.value)}>
+              <option value="">اختر</option>
+              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </Field>
+          <Button onClick={() => setAddingSupplier(true)} style={{ marginBottom: errors.supplierId ? 22 : 0 }}><Plus size={16} aria-hidden />مورد جديد</Button>
+        </div>
         <Field label="تاريخ الفاتورة" error={errors.date}>
-          <input type="date" value={v.date} onChange={(e) => { setV({ ...v, date: e.target.value }); setErrors((s) => ({ ...s, date: '' })) }} />
+          <input type="date" value={v.date} onChange={(e) => { setV({ ...v, date: e.target.value }); clearError(['date']) }} />
         </Field>
 
-        <fieldset className="lines field-full">
-          <legend>أصناف الفاتورة</legend>
-          <datalist id="known-products">{known.map((p) => <option key={p} value={p} />)}</datalist>
-          {rows.map((r, i) => {
-            const cut = r.id ? taken.get(r.id) ?? 0 : 0
+        <div className="order-cards field-full">
+          {drafts.map((d, n) => {
+            const own = d.id ? byId.get(d.id) : undefined
+            const removable = !own || own.status === 'unassigned'
             return (
-              <div className="line-row line-row-invoice" key={r.key}>
-                <Field label={`الصنف ${fmtNum(i + 1)}`} error={errors[`product${r.key}`]}>
-                  <input list="known-products" value={r.product} onChange={(e) => setRow(r.key, { product: e.target.value })} />
-                </Field>
-                <Field label="الكمية" error={errors[`quantity${r.key}`]}>
-                  <input type="number" inputMode="numeric" min={Math.max(cut, 1)} value={r.quantity} onChange={(e) => setRow(r.key, { quantity: e.target.value })} />
-                </Field>
-                <Field label="الوحدة">
-                  <select value={r.unit} onChange={(e) => setRow(r.key, { unit: e.target.value })}>
-                    {UNITS.map((u) => <option key={u}>{u}</option>)}
-                  </select>
-                </Field>
-                <Field label="تكلفة الوحدة" error={errors[`unitCost${r.key}`]}>
-                  <input type="number" min={1} value={r.unitCost} onChange={(e) => setRow(r.key, { unitCost: e.target.value })} />
-                </Field>
-                <IconButton label={cut ? `الصنف ${fmtNum(i + 1)} مقسَّم إلى طلبات ولا يمكن حذفه` : `حذف الصنف ${fmtNum(i + 1)}`} disabled={rows.length === 1 || cut > 0}
-                  onClick={() => setRows((list) => list.filter((x) => x.key !== r.key))}><Trash2 size={16} /></IconButton>
-              </div>
+              <section className="order-card" key={d.key} aria-label={`الطلب ${n + 1}`}>
+                <header className="order-card-head">
+                  <h3>الطلب {fmtNum(n + 1)}{own && <small>{own.id}، {STATUS_LABEL[own.status]}</small>}</h3>
+                  <IconButton label={removable ? `حذف الطلب ${fmtNum(n + 1)}` : `الطلب ${fmtNum(n + 1)} خرج مع مندوب ولا يمكن حذفه من هنا`} disabled={drafts.length === 1 || !removable}
+                    onClick={() => setDrafts((list) => list.filter((x) => x.key !== d.key))}><Trash2 size={16} /></IconButton>
+                </header>
+                <OrderFields draft={d} onChange={setDraft} errors={errors} clearError={clearError} prefix={`o${d.key}-`} products={products} goodsLocked={closedOf(d)} />
+              </section>
             )
           })}
-          <Button onClick={() => setRows((list) => [...list, blank(Math.max(...list.map((x) => x.key)) + 1)])}><Plus size={16} aria-hidden />إضافة صنف آخر</Button>
-        </fieldset>
+          <Button onClick={addDraft}><Plus size={16} aria-hidden />إضافة طلب آخر</Button>
+        </div>
+
+        <section className="invoice-summary field-full" aria-label="ملخص الفاتورة">
+          <h3 className="totals-head">ملخص الفاتورة</h3>
+          <div className="load-numbers">
+            <p><b>{fmtNum(drafts.length)}</b> طلبات</p>
+            <p><b>{fmtMoney(price)}</b> إجمالي سعر الطلبات</p>
+            <p><b>{fmtMoney(fees)}</b> رسوم التوصيل</p>
+            <p><b>{fmtNum(totals.reduce((n, t) => n + t.quantity, 0))}</b> قطعة</p>
+          </div>
+          {totals.some((t) => t.product) && (
+            <ul className="totals">
+              {totals.filter((t) => t.product).map((t) => <li key={t.key}><span>{t.product}<small>{t.category}</small></span><b>× {fmtNum(t.quantity)}</b></li>)}
+            </ul>
+          )}
+        </section>
 
         <Field label="ملاحظة" full><textarea rows={2} value={v.note} onChange={(e) => setV({ ...v, note: e.target.value })} /></Field>
       </form>
+      {addingSupplier && (
+        <SupplierForm onClose={() => setAddingSupplier(false)} onSaved={(id, cat) => {
+          pickSupplier(id, cat)
+          setAddingSupplier(false)
+        }} />
+      )}
     </Drawer>
   )
 }

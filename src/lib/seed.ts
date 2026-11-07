@@ -1,12 +1,14 @@
-import type { Db, Driver, Invoice, InvoiceLine, Order, OrderEvent, OrderItem, OrderStatus, Staff, Supplier } from '../types'
-import { CATEGORIES, PRESETS, ZONES, emptyPermissions } from './domain'
+import type { Db, Driver, Invoice, Order, OrderEvent, OrderItem, OrderStatus, Refund, Staff, Supplier } from '../types'
+import { CATEGORIES, NOTE_BACK, NOTE_MISSING, PRESETS, ZONES, emptyPermissions } from './domain'
 
 const DAY = 86400000
 const HOUR = 3600000
-const DENY_REASONS = ['خارج منطقتي اليوم', 'المركبة لا تتحمل الحمولة', 'لدي طلبات كثيرة الآن']
+const REFUND_REASONS = ['العميل لا يرد على الهاتف', 'العنوان غير صحيح', 'العميل رفض الاستلام، قال إن المقاس مختلف', 'العميل طلب التأجيل للأسبوع القادم', 'المنتج وصل مكسور']
+
+type Life = { status: OrderStatus; driverId: string | null; list: OrderEvent[]; refund?: Refund }
 
 export function createSeed(now = Date.now()): Db {
-  let state = 20261030
+  let state = 20261107
   const rand = () => {
     state = (state * 1664525 + 1013904223) >>> 0
     return state / 4294967296
@@ -37,13 +39,15 @@ export function createSeed(now = Date.now()): Db {
     createdAt: now - int(100, 400) * DAY,
   }))
 
-  const products: Record<string, [string, string, number][]> = {
-    [CATEGORIES[0]]: [['أرز مصري 5 كجم', 'شوال', 210], ['زيت عباد الشمس 12 عبوة', 'كرتونة', 780], ['سكر 1 كجم 20 عبوة', 'كرتونة', 640], ['زيت زيتون 6 عبوات', 'كرتونة', 1150]],
-    [CATEGORIES[1]]: [['برطمانات زجاج', 'كرتونة', 420], ['طقم حلل تيفال', 'كرتونة', 1340], ['صناديق بلاستيك', 'بالة', 310]],
-    [CATEGORIES[2]]: [['فوط قطن', 'بالة', 1680], ['أطقم ملايات', 'بالة', 2250]],
-    [CATEGORIES[3]]: [['غلايات كهربائية', 'كرتونة', 1890], ['لمبات ليد 10 عبوات', 'كرتونة', 390], ['شواحن موبايل', 'كرتونة', 1120]],
-    [CATEGORIES[4]]: [['مسحوق غسيل 4 كجم', 'كرتونة', 560], ['سائل أطباق 12 عبوة', 'كرتونة', 370]],
+  /* Product name and the price of one piece, per category. */
+  const products: Record<string, [string, number][]> = {
+    [CATEGORIES[0]]: [['أرز مصري 5 كجم', 210], ['زيت عباد الشمس', 95], ['سكر 1 كجم', 38], ['زيت زيتون', 260]],
+    [CATEGORIES[1]]: [['برطمانات زجاج', 70], ['طقم حلل تيفال', 1340], ['صناديق بلاستيك', 85]],
+    [CATEGORIES[2]]: [['فوط قطن', 120], ['طقم ملايات', 450]],
+    [CATEGORIES[3]]: [['غلاية كهربائية', 690], ['لمبة ليد', 45], ['شاحن موبايل', 180]],
+    [CATEGORIES[4]]: [['مسحوق غسيل 4 كجم', 230], ['سائل أطباق', 40]],
   }
+  const unitPrice = new Map(Object.values(products).flat())
 
   const driverSeed: [string, string, string][] = [
     ['كريم عادل', 'موتوسيكل', 'مدينة نصر'],
@@ -78,56 +82,56 @@ export function createSeed(now = Date.now()): Db {
 
   const clients = ['نورا سالم', 'فادي ميشيل', 'رنا عصام', 'مخبز النور', 'فندق الصحراء', 'سوبر ماركت ألفا', 'آية توفيق', 'خالد سعيد', 'كافيه روما', 'مريم وجدي', 'بقالة بالهنا', 'يارا حلمي', 'عمرو بدوي', 'مطعم زهران', 'شريف لطفي', 'صيدلية سيف', 'صلاح يونس', 'نادية غالي', 'نادي أطفال المعادي', 'مطبخ حلو']
   const streets = ['ش عباس العقاد', 'ش مكرم عبيد', 'ش 9', 'ش جامعة الدول', 'ش التحرير', 'ش فيصل', 'ش الميرغني', 'ش شبرا', 'ش التسعين', 'طريق المحور']
+  const DISPATCH = 'طارق زكي'
 
-  const lifecycle = (createdAt: number): { status: OrderStatus; driverId: string | null; list: OrderEvent[] } => {
+  const lifecycle = (createdAt: number): Life => {
     const age = (now - createdAt) / DAY
-    const list: OrderEvent[] = [{ at: createdAt, status: 'unassigned', by: pick(['منى فاروق', 'طارق زكي']) }]
-    const stage = age > 3 ? 4 : age > 1.5 ? pick([3, 4, 4]) : age > 0.5 ? pick([1, 2, 3, 3, 4]) : pick([0, 0, 1, 2, 3])
+    const list: OrderEvent[] = [{ at: createdAt, status: 'unassigned', by: pick(['منى فاروق', DISPATCH]) }]
+    const stage = age > 3 ? 2 : age > 1 ? pick([1, 2, 2]) : pick([0, 1, 1, 2])
     if (stage === 0) return { status: 'unassigned', driverId: null, list }
     const pool = drivers.slice(0, age > 30 ? 9 : 8)
     let at = createdAt + int(1, 6) * HOUR
-    const step = (status: OrderStatus, by: string, driverId: string, note?: string) => {
-      list.push({ at: Math.min(at, now - 60000), status, by, note, driverId })
-    }
-    const assign = (d: Driver) => step('assigned', 'طارق زكي', d.id, `أُسند إلى ${d.name}`)
+    const push = (status: OrderStatus, by: string, driverId: string, note?: string) => list.push({ at: Math.min(at, now - 60000), status, by, note, driverId })
+    const assign = (d: Driver) => push('assigned', DISPATCH, d.id, `أُسند إلى ${d.name}`)
 
-    if (rand() < 0.1) {
-      const refuser = pick(pool)
-      assign(refuser)
-      at += int(5, 50) * 60000
-      step('denied', refuser.name, refuser.id, pick(DENY_REASONS))
-      if (stage === 1) return { status: 'denied', driverId: null, list }
-      at += int(1, 4) * HOUR
-    }
-    const driver = pick(pool)
+    let driver = pick(pool)
     assign(driver)
     if (stage === 1) return { status: 'assigned', driverId: driver.id, list }
-    at += int(5, 60) * 60000
-    step('accepted', driver.name, driver.id)
-    if (stage === 2) return { status: 'accepted', driverId: driver.id, list }
-    at += int(1, 10) * HOUR
-    step('picked', driver.name, driver.id)
-    if (stage === 3) return { status: 'picked', driverId: driver.id, list }
-    at += int(40, 400) * 60000
-    const failed = rand() < 0.11
-    step(failed ? 'failed' : 'delivered', driver.name, driver.id, failed ? pick(['العميل لا يرد', 'العنوان خطأ', 'العميل رفض الاستلام']) : undefined)
-    return { status: failed ? 'failed' : 'delivered', driverId: driver.id, list }
+    at += int(40, 600) * 60000
+    if (rand() < 0.13) {
+      const reason = pick(REFUND_REASONS)
+      push('refunded', driver.name, driver.id, reason)
+      const refundAt = Math.min(at, now - 60000)
+      const settled = age > 2
+      const back = settled ? rand() < 0.88 : undefined
+      if (settled) {
+        at += int(1, 5) * HOUR
+        push('refunded', DISPATCH, driver.id, back ? NOTE_BACK : NOTE_MISSING)
+      }
+      /* Some returned orders get a second try with another delivery man. */
+      if (!back || age < 4 || rand() < 0.6) return { status: 'refunded', driverId: driver.id, list, refund: { reason, at: refundAt, driverId: driver.id, back } }
+      at += int(2, 20) * HOUR
+      driver = pick(pool)
+      assign(driver)
+      at += int(40, 400) * 60000
+    }
+    push('delivered', driver.name, driver.id)
+    return { status: 'delivered', driverId: driver.id, list }
   }
 
   const invoices: Invoice[] = []
   const orders: Order[] = []
-  let lineNo = 1
   let orderNo = 20001
-  const makeLine = (product: string, unit: string, cost: number, quantity: number): InvoiceLine =>
-    ({ id: `L-${lineNo++}`, product, unit, quantity, unitCost: cost })
-  const costOf = (items: OrderItem[], lines: InvoiceLine[]) =>
-    items.reduce((n, i) => n + i.quantity * (lines.find((l) => l.id === i.lineId)?.unitCost ?? 0), 0)
-  const addOrder = (items: OrderItem[], lines: InvoiceLine[], createdAt: number, life: { status: OrderStatus; driverId: string | null; list: OrderEvent[] }) => {
+  const addOrder = (invoiceId: string, code: string, items: OrderItem[], createdAt: number, life: Life) => {
     const zone = pick(ZONES)
+    const goods = items.reduce((n, i) => n + i.quantity * (unitPrice.get(i.product) ?? 100), 0)
     orders.push({
       id: `ORD-${orderNo++}`,
+      invoiceId,
+      code,
       items,
-      price: Math.round((costOf(items, lines) * (1.12 + rand() * 0.22)) / 5) * 5,
+      price: Math.round(goods / 5) * 5,
+      fee: pick([40, 50, 50, 60, 75]),
       client: pick(clients),
       phone: phone(),
       address: `${int(1, 120)} ${pick(streets)}، ${zone}`,
@@ -136,64 +140,52 @@ export function createSeed(now = Date.now()): Db {
       status: life.status,
       createdAt,
       events: life.list,
+      refund: life.refund,
     })
   }
+  const itemsFrom = (category: string, count: number): OrderItem[] =>
+    [...products[category]].sort(() => rand() - 0.5).slice(0, count).map(([product]) => ({ product, category, quantity: int(1, 6) }))
 
   for (let i = 0; i < 36; i++) {
     const supplier = suppliers[i % 7]
-    const catalog = [...products[supplier.category]].sort(() => rand() - 0.5)
-    const lines = catalog.slice(0, int(1, catalog.length)).map(([product, unit, cost]) => makeLine(product, unit, cost, int(4, 30) * 10))
     const ageDays = i === 0 ? 0.2 : i < 5 ? int(1, 3) : int(3, 88)
     const date = now - ageDays * DAY
-    invoices.push({ id: `INV-${1001 + i}`, supplierId: supplier.id, date, note: '', lines })
-
-    const coverage = ageDays < 1 ? 0 : ageDays < 4 ? pick([0.3, 0.6, 0.8]) : i % 9 === 0 ? 0.7 : 1
-    const left = new Map(lines.map((l) => [l.id, Math.round(l.quantity * coverage)]))
-    for (;;) {
-      const open = lines.filter((l) => (left.get(l.id) ?? 0) > 0).sort(() => rand() - 0.5)
-      if (!open.length) break
-      const items = open.slice(0, int(1, 3)).map((l) => {
-        const quantity = Math.min(left.get(l.id) ?? 0, int(Math.ceil(l.quantity / 12), Math.ceil(l.quantity / 4)))
-        left.set(l.id, (left.get(l.id) ?? 0) - quantity)
-        return { lineId: l.id, quantity }
-      })
-      const createdAt = Math.min(date + int(2, 48) * HOUR, now - int(1, 8) * HOUR)
-      addOrder(items, lines, createdAt, lifecycle(createdAt))
+    const id = `INV-${1001 + i}`
+    invoices.push({ id, supplierId: supplier.id, date, note: '' })
+    const prefix = supplier.name.split(' ')[0].slice(0, 3)
+    for (let n = 0, count = int(3, 10); n < count; n++) {
+      const createdAt = Math.min(date + int(1, 4) * HOUR, now - int(1, 3) * HOUR)
+      let items = itemsFrom(supplier.category, int(1, 3))
+      if (rand() < 0.15) items = [...items, ...itemsFrom(pick(CATEGORIES), 1)].filter((x, k, all) => all.findIndex((y) => y.product === x.product) === k)
+      addOrder(id, `${prefix}-${int(1000, 9999)}`, items, createdAt, lifecycle(createdAt))
     }
   }
 
-  /* Two fresh invoices feed a fixed set of orders, so the first delivery man's screens show every state,
-     including orders that mix products from different suppliers. */
-  const foodLines = [makeLine('أرز مصري 5 كجم', 'شوال', 210, 200), makeLine('زيت عباد الشمس 12 عبوة', 'كرتونة', 780, 120), makeLine('سكر 1 كجم 20 عبوة', 'كرتونة', 640, 90)]
-  const homeLines = [makeLine('برطمانات زجاج', 'كرتونة', 420, 80), makeLine('طقم حلل تيفال', 'كرتونة', 1340, 40)]
-  invoices.push(
-    { id: 'INV-1037', supplierId: 'S-1', date: now - 2 * DAY, note: 'توريد الأسبوع', lines: foodLines },
-    { id: 'INV-1038', supplierId: 'S-3', date: now - 2 * DAY, note: '', lines: homeLines },
-  )
-  const allLines = [...foodLines, ...homeLines]
+  /* A fixed set of fresh orders, so the first delivery man's screens show every state. */
   const karim = drivers[0]
-  const script = (hoursAgo: number, items: [InvoiceLine, number][], path: [OrderStatus, string?][]) => {
+  invoices.push({ id: 'INV-1037', supplierId: 'S-1', date: now - 1 * DAY, note: 'توريد الأسبوع' })
+  const script = (hoursAgo: number, items: [string, number][], path: [OrderStatus, string?][], back?: boolean) => {
     const createdAt = now - hoursAgo * HOUR
-    const list: OrderEvent[] = [{ at: createdAt, status: 'unassigned', by: 'طارق زكي' }]
+    const list: OrderEvent[] = [{ at: createdAt, status: 'unassigned', by: DISPATCH }]
     path.forEach(([status, note], i) => {
       const at = createdAt + ((i + 1) * hoursAgo * HOUR) / (path.length + 1)
       list.push(status === 'assigned'
-        ? { at, status, by: 'طارق زكي', note: `أُسند إلى ${karim.name}`, driverId: karim.id }
+        ? { at, status, by: DISPATCH, note: `أُسند إلى ${karim.name}`, driverId: karim.id }
         : { at, status, by: karim.name, note, driverId: karim.id })
     })
-    const status = path[path.length - 1][0]
-    addOrder(items.map(([l, quantity]) => ({ lineId: l.id, quantity })), allLines, createdAt, { status, driverId: status === 'denied' ? null : karim.id, list })
+    const [status, note] = path[path.length - 1]
+    const refundAt = list[list.length - 1].at
+    if (back !== undefined) list.push({ at: refundAt + HOUR / 2, status: 'refunded', by: DISPATCH, note: back ? NOTE_BACK : NOTE_MISSING, driverId: karim.id })
+    addOrder('INV-1037', `وادي-${5100 + orders.length % 100}`, items.map(([product, quantity]) => ({ product, category: CATEGORIES[0], quantity })), createdAt,
+      { status, driverId: karim.id, list, refund: status === 'refunded' ? { reason: note ?? '', at: refundAt, driverId: karim.id, back } : undefined })
   }
-  const [rice, oil, sugar] = foodLines
-  const [jars, pots] = homeLines
-  script(3, [[rice, 6], [oil, 2], [pots, 1]], [['assigned']])
-  script(2, [[sugar, 3], [jars, 2]], [['assigned']])
-  script(1, [[oil, 4]], [['assigned']])
-  script(6, [[rice, 10], [sugar, 2]], [['assigned'], ['accepted']])
-  script(9, [[jars, 3], [pots, 2], [oil, 1]], [['assigned'], ['accepted'], ['picked']])
-  script(7, [[rice, 25], [oil, 12]], [['assigned'], ['denied', 'المركبة لا تتحمل الحمولة']])
-  script(20, [[sugar, 5], [rice, 4]], [['assigned'], ['accepted'], ['picked'], ['delivered']])
-  script(26, [[pots, 1], [jars, 1]], [['assigned'], ['accepted'], ['picked'], ['failed', 'العميل لا يرد']])
+  script(3, [['أرز مصري 5 كجم', 2], ['زيت عباد الشمس', 3]], [['assigned']])
+  script(2, [['سكر 1 كجم', 6]], [['assigned']])
+  script(1, [['زيت زيتون', 1], ['أرز مصري 5 كجم', 1]], [['assigned']])
+  script(6, [['زيت عباد الشمس', 4]], [['assigned']])
+  script(20, [['سكر 1 كجم', 5], ['أرز مصري 5 كجم', 4]], [['assigned'], ['delivered']])
+  script(18, [['زيت زيتون', 2]], [['assigned'], ['refunded', 'العميل لا يرد على الهاتف، اتصلت 3 مرات']])
+  script(26, [['أرز مصري 5 كجم', 3]], [['assigned'], ['refunded', 'العميل رفض الاستلام']], true)
 
   return { suppliers, invoices, drivers, orders, staff }
 }
